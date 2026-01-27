@@ -43,6 +43,7 @@ export function PitchView({
   enableCaptaincyOptions = true,
   showAllPlayers = false,
   onRemove,
+  onCaptainChange,
 }: PitchViewProps) {
   // Filter for empty slots (placeholders have id < 0)
   const isEmptySlot = (p: PlayerWithFixtures) => p.id < 0;
@@ -226,9 +227,6 @@ interface PlayerPitchCardProps {
   isCaptain?: boolean;
   isViceCaptain?: boolean;
   isSelected?: boolean;
-  onCaptainSelect?: () => void;
-  onViceCaptainSelect?: () => void;
-  onCaptainSelect?: () => void;
   onViceCaptainSelect?: () => void;
   enableCaptaincyOptions?: boolean;
   onRemove?: (playerId: number) => void;
