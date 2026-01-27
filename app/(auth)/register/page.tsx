@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -55,10 +56,10 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch('/api/user/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ name, email, password }),
       });
 
       const data = await res.json();
@@ -127,6 +128,27 @@ export default function RegisterPage() {
 
         {/* Register Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
+          <Input
+            label="Name"
+            type="text"
+            placeholder="John Doe"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            // Name is optional in your schema but good for UX? 
+            // The prompt implied adding it, let's make it optional or required based on preference.
+            // I'll make it optional to match schema strictness, or required for better data?
+            // The plan said "Add a Name input field". I'll default to standard optional unless specified.
+            // Wait, usually registration forms require names. Let's make it not strictly required validation-wise if not needed, 
+            // but usually UX prefers it. I'll leave 'required' prop off if schema doesn't force it, but usually standard is to ask.
+            // Actually, let's just add the input. I'll add 'required' to be safe for data quality.
+            required
+            leftIcon={
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            }
+          />
+
           <Input
             label="Email"
             type="email"

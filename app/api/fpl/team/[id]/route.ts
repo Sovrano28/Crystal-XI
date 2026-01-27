@@ -50,23 +50,24 @@ export async function GET(
     }
     // Second priority: Use last_deadline values (not ideal, but better than nothing)
     else if (generalTeamData) {
-      const lastDeadlineValue = (generalTeamData as any)?.last_deadline_value;
-      const lastDeadlineBank = (generalTeamData as any)?.last_deadline_bank;
+      const lastDeadlineValue = generalTeamData.last_deadline_value;
+      const lastDeadlineBank = generalTeamData.last_deadline_bank;
+      
       if (lastDeadlineValue !== undefined || lastDeadlineBank !== undefined) {
         finalEntryHistory = {
           ...(generalTeamData.entry_history || {}),
           value: lastDeadlineValue ?? generalTeamData.entry_history?.value,
           bank: lastDeadlineBank ?? generalTeamData.entry_history?.bank,
-          total_points: (generalTeamData as any)?.summary_overall_points ?? generalTeamData.entry_history?.total_points,
-          overall_rank: (generalTeamData as any)?.summary_overall_rank ?? generalTeamData.entry_history?.overall_rank,
+          total_points: generalTeamData.summary_overall_points ?? generalTeamData.entry_history?.total_points,
+          overall_rank: generalTeamData.summary_overall_rank ?? generalTeamData.entry_history?.overall_rank,
         };
         console.log(`[Team API] Using last_deadline values (fallback): value=${finalEntryHistory.value}, bank=${finalEntryHistory.bank}`);
       }
-    }
-    // Last resort: Use entry_history from general team data
-    else if (generalTeamData?.entry_history) {
-      finalEntryHistory = generalTeamData.entry_history;
-      console.log(`[Team API] Using entry_history from general team data as fallback: value=${finalEntryHistory.value}, bank=${finalEntryHistory.bank}`);
+      // Last resort: Use entry_history from general team data
+      else if (generalTeamData.entry_history) {
+        finalEntryHistory = generalTeamData.entry_history;
+        console.log(`[Team API] Using entry_history from general team data as fallback: value=${finalEntryHistory.value}, bank=${finalEntryHistory.bank}`);
+      }
     }
     
     console.log(`[Team API] Final entry_history for team ${teamId}:`, {
@@ -94,8 +95,8 @@ export async function GET(
             event: currentEvent.id,
             points: picksData.entry_history?.points || 0,
             total_points: generalTeamData?.summary_overall_points || picksData.entry_history?.total_points || 0,
-            bank: generalTeamData?.bank ?? picksData.entry_history?.bank ?? 0,
-            value: generalTeamData?.value ?? picksData.entry_history?.value ?? 0,
+            bank: generalTeamData?.last_deadline_bank ?? picksData.entry_history?.bank ?? 0,
+            value: generalTeamData?.last_deadline_value ?? picksData.entry_history?.value ?? 0,
             rank: picksData.entry_history?.rank,
             rank_sort: picksData.entry_history?.rank_sort,
             overall_rank: generalTeamData?.summary_overall_rank || picksData.entry_history?.overall_rank,

@@ -1,28 +1,33 @@
 import { useState, useEffect } from 'react';
 import { FPLEvent } from '@/types/fpl';
 import { useBootstrapData } from './useFPLData';
+import { getPlanningGameweek, getScoringGameweek } from '@/lib/fpl-api';
 
 export function useGameweeks() {
   const { data: bootstrap } = useBootstrapData();
-  const [currentGameweek, setCurrentGameweek] = useState<number>(1);
+  const [planningGameweek, setPlanningGameweek] = useState<number>(1);
+  const [scoringGameweek, setScoringGameweek] = useState<number>(1);
   const [remainingGameweeks, setRemainingGameweeks] = useState<FPLEvent[]>([]);
 
   useEffect(() => {
     if (!bootstrap) return;
 
-    const current = bootstrap.events.find((event) => event.is_current);
-    if (current) {
-      setCurrentGameweek(current.id);
-    }
+    const planningGW = getPlanningGameweek(bootstrap.events);
+    const scoringGW = getScoringGameweek(bootstrap.events);
+    
+    setPlanningGameweek(planningGW);
+    setScoringGameweek(scoringGW);
 
     const remaining = bootstrap.events.filter(
-      (event) => event.id >= (current?.id || 1) && !event.finished
+      (event) => event.id >= planningGW && !event.finished
     );
     setRemainingGameweeks(remaining);
   }, [bootstrap]);
 
   return {
-    currentGameweek,
+    planningGameweek,
+    scoringGameweek,
+    currentGameweek: planningGameweek, // For backward compatibility
     remainingGameweeks,
     allGameweeks: bootstrap?.events || [],
   };

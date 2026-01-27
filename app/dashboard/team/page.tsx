@@ -30,13 +30,13 @@ export default function TeamPage() {
     setMessage('');
     const success = await updateTeamId(teamId);
     if (success) {
-      setMessage('Team ID saved successfully! Redirecting to dashboard...');
+      setMessage('Team ID saved successfully!');
       setMessageType('success');
       setTeamIdInput('');
+      router.refresh();
       setTimeout(() => {
-        router.push('/');
-        router.refresh();
-      }, 1500);
+        setMessage('');
+      }, 3000);
     } else {
       setMessage('Failed to update team ID. Please try again.');
       setMessageType('error');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { PlayerWithFixtures } from '@/types/fpl';
 import { FDRBadge, PositionBadge, GameweekBadge } from '@/components/ui/Badge';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -64,9 +64,9 @@ export function EnhancedGameweekGrid({
           </thead>
           <tbody>
             {Object.entries(groupedPlayers).map(([posKey, posPlayers]) => (
-              <>
+              <Fragment key={posKey}>
                 {/* Position Header */}
-                <tr key={posKey} className="bg-[var(--surface)]/50">
+                <tr className="bg-[var(--surface)]/50">
                   <td
                     colSpan={gameweeks.length + 1}
                     className="sticky left-0 z-10 px-4 py-2 text-sm font-semibold text-[var(--foreground-secondary)]"
@@ -163,7 +163,7 @@ export function EnhancedGameweekGrid({
                     })}
                   </tr>
                 ))}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>

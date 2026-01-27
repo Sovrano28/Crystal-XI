@@ -1,12 +1,16 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useUserTeam } from '@/hooks/useTeam';
 import { useBootstrapData, useTeamData } from '@/hooks/useFPLData';
+import { useGameweeks } from '@/hooks/useGameweeks';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { SkeletonStatsCard } from '@/components/ui/Skeleton';
+import { PointsPitchView } from '@/components/dashboard/PointsPitchView';
+import { PlayerWithPoints } from '@/types/fpl';
 import { cn } from '@/lib/utils';
 
 export default function DashboardPage() {
@@ -14,6 +18,11 @@ export default function DashboardPage() {
   const { fplTeamId, loading: teamLoading } = useUserTeam();
   const { data: bootstrap, loading: bootstrapLoading } = useBootstrapData();
   const { data: teamData, loading: teamDataLoading } = useTeamData(fplTeamId);
+  const { scoringGameweek, planningGameweek } = useGameweeks();
+
+  const [playersWithPoints, setPlayersWithPoints] = useState<PlayerWithPoints[]>([]);
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [pointsError, setPointsError] = useState<string | null>(null);
 
   const isLoading = teamLoading || bootstrapLoading || teamDataLoading;
 
@@ -25,7 +34,64 @@ export default function DashboardPage() {
     return 'Good evening';
   };
 
-  const currentGameweek = bootstrap?.events.find((e) => e.is_current);
+  // Fetch player points for scoring gameweek
+  useEffect(() => {
+    async function loadPlayerPoints() {
+      if (!bootstrap || !teamData || !fplTeamId || !scoringGameweek) {
+        return;
+      }
+
+      // Check if picks are available
+      if (!teamData.picks || !Array.isArray(teamData.picks) || teamData.picks.length === 0) {
+        return;
+      }
+
+      try {
+        setPointsLoading(true);
+        setPointsError(null);
+        const playerIds = teamData.picks.map((pick) => pick.element);
+        
+        // Fetch players with points through API route
+        const response = await fetch('/api/fpl/player-points', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ playerIds, gameweek: scoringGameweek }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch player points');
+        }
+
+        const data = await response.json();
+
+        
+        // Merge captaincy data from picks
+        const enhancedPlayers = (data.players || []).map((player: PlayerWithPoints) => {
+          const pick = teamData.picks.find((p) => p.element === player.id);
+          if (pick) {
+            return {
+              ...player,
+              is_captain: pick.is_captain,
+              is_vice_captain: pick.is_vice_captain,
+            };
+          }
+          return player;
+        });
+
+        setPlayersWithPoints(enhancedPlayers);
+      } catch (err) {
+        console.error('Error loading player points:', err);
+        setPointsError(err instanceof Error ? err.message : 'Failed to load player points');
+      } finally {
+        setPointsLoading(false);
+      }
+    }
+
+    loadPlayerPoints();
+  }, [bootstrap, teamData, fplTeamId, scoringGameweek]);
+
   const totalPoints = teamData?.entry_history?.total_points || 0;
   const currentBank = teamData?.entry_history?.bank || 0;
   const teamValue = teamData?.entry_history?.value || 0;
@@ -64,7 +130,7 @@ export default function DashboardPage() {
     },
     {
       label: 'Current GW',
-      value: currentGameweek?.id?.toString() || '-',
+      value: scoringGameweek?.toString() || '-',
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -210,6 +276,82 @@ export default function DashboardPage() {
               </Link>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Current Gameweek Points Section */}
+      {fplTeamId && scoringGameweek && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                Gameweek {scoringGameweek} Points
+              </h2>
+              <p className="text-sm text-[var(--foreground-muted)] mt-1">
+                Points scored by your players in the current gameweek
+              </p>
+            </div>
+          </div>
+
+          {pointsLoading ? (
+            <Card padding="md">
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="w-12 h-12 border-4 border-[var(--pl-magenta)] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <p className="text-sm text-[var(--foreground-muted)]">Loading player points...</p>
+                </div>
+              </div>
+            </Card>
+          ) : pointsError ? (
+            <Card padding="md" className="border-red-500/30">
+              <div className="text-center py-8">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <p className="text-sm text-red-500">{pointsError}</p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => {
+                    setPointsError(null);
+                    // Trigger reload by updating a dependency
+                    if (teamData && fplTeamId && scoringGameweek) {
+                      const playerIds = teamData.picks.map((pick) => pick.element);
+                      fetch('/api/fpl/player-points', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ playerIds, gameweek: scoringGameweek }),
+                      })
+                        .then((res) => res.json())
+                        .then((data) => setPlayersWithPoints(data.players || []))
+                        .catch((err) => setPointsError(err.message));
+                    }
+                  }}
+                >
+                  Try Again
+                </Button>
+              </div>
+            </Card>
+          ) : playersWithPoints.length > 0 ? (
+            <Card padding="none" className="overflow-hidden">
+              <PointsPitchView
+                players={playersWithPoints}
+                teams={bootstrap?.teams || []}
+                gameweek={scoringGameweek}
+              />
+            </Card>
+          ) : (
+            <Card padding="md">
+              <div className="text-center py-8">
+                <p className="text-sm text-[var(--foreground-muted)]">
+                  No player points data available for Gameweek {scoringGameweek}
+                </p>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 

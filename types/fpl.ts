@@ -117,11 +117,11 @@ export interface FPLFixture {
   team_h_score?: number;
   team_a: number; // Away team ID
   team_a_score?: number;
-  event: number; // Gameweek number
+  event: number | null; // Gameweek number (can be null for unscheduled fixtures)
   finished: boolean;
   minutes: number;
   provisional_start_time: boolean;
-  kickoff_time: string;
+  kickoff_time: string | null;
   event_name: string;
   is_home: boolean;
   difficulty: number; // FDR (1-5)
@@ -183,6 +183,45 @@ export interface FPLTeamPicks {
   }>;
 }
 
+export interface FPLGeneralTeamData {
+  id: number;
+  joined_time: string;
+  started_event: number;
+  favourite_team: number;
+  player_first_name: string;
+  player_last_name: string;
+  player_region_id: number;
+  player_region_name: string;
+  player_region_iso_code_short: string;
+  player_region_iso_code_long: string;
+  summary_overall_points: number;
+  summary_overall_rank: number;
+  summary_event_points: number;
+  summary_event_rank: number;
+  current_event: number;
+  name: string;
+  name_change_blocked_online: boolean;
+  last_deadline_bank: number;
+  last_deadline_value: number;
+  last_deadline_total_transfers: number;
+  // It might contain entry_history if accessed internally but standard API doesn't always show it at root? 
+  // Actually, route.ts logic assumes it DOES NOT have entry_history usually, except as fallback.
+  // But let's add it as optional just in case.
+  entry_history?: {
+    event: number;
+    points: number;
+    total_points: number;
+    rank: number;
+    rank_sort: number;
+    overall_rank: number;
+    bank: number;
+    value: number;
+    event_transfers: number;
+    event_transfers_cost: number;
+    points_on_bench: number;
+  };
+}
+
 export interface PlayerFixture {
   gameweek: number;
   opponent: FPLTeam;
@@ -193,5 +232,41 @@ export interface PlayerFixture {
 
 export interface PlayerWithFixtures extends FPLPlayer {
   upcomingFixtures: PlayerFixture[];
+  is_captain?: boolean;
+  is_vice_captain?: boolean;
 }
 
+export interface PlayerPoints {
+  gameweek: number;
+  total_points: number;
+  minutes: number;
+  goals_scored: number;
+  assists: number;
+  clean_sheets: number;
+  goals_conceded: number;
+  yellow_cards: number;
+  red_cards: number;
+  saves: number;
+  bonus: number;
+  bps: number;
+  influence: string;
+  creativity: string;
+  threat: string;
+  ict_index: string;
+  starts: number;
+  expected_goals: string;
+  expected_assists: string;
+  expected_goal_involvements: string;
+  expected_goals_conceded: string;
+  value: number;
+  transfers_balance: number;
+  selected: number;
+  transfers_in: number;
+  transfers_out: number;
+}
+
+export interface PlayerWithPoints extends FPLPlayer {
+  gameweekPoints?: PlayerPoints;
+  is_captain?: boolean;
+  is_vice_captain?: boolean;
+}

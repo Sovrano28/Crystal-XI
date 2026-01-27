@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPlayersWithFixtures, getCurrentGameweek } from '@/lib/fpl-api';
+import { getPlayersWithFixtures, fetchBootstrapStatic, getPlanningGameweek } from '@/lib/fpl-api';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,12 +12,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const currentGW = await getCurrentGameweek();
-    const playersWithFixtures = await getPlayersWithFixtures(playerIds, currentGW);
+    const bootstrap = await fetchBootstrapStatic();
+    const planningGW = getPlanningGameweek(bootstrap.events);
+    const playersWithFixtures = await getPlayersWithFixtures(playerIds, planningGW);
 
     return NextResponse.json({
       players: playersWithFixtures,
-      currentGameweek: currentGW,
+      currentGameweek: planningGW,
     });
   } catch (error) {
     console.error('Error fetching players with fixtures:', error);

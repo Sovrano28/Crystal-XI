@@ -30,11 +30,11 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user
-    const user = await UserModel.create({
+    const user = (await UserModel.create({
       email,
       name,
       password: hashedPassword,
-    });
+    } as any)) as any;
 
     return NextResponse.json(
       { message: 'User created successfully', userId: user._id.toString() },

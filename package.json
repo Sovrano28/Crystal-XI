@@ -11,8 +11,10 @@
   "dependencies": {
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-context-menu": "^2.2.16",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
+    "lucide-react": "^0.563.0",
     "mongoose": "^9.0.1",
     "next": "16.0.10",
     "next-auth": "^5.0.0-beta.30",

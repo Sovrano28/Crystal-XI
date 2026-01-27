@@ -1,7 +1,7 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import { User } from '@/types/user';
 
-interface UserDocument extends User {
+interface UserDocument extends Omit<User, 'id' | 'createdAt' | 'updatedAt'> {
   password?: string;
 }
 
@@ -30,7 +30,7 @@ const UserSchema = new Schema<UserDocument>(
   }
 );
 
-const UserModel: Model<User> = mongoose.models.User || mongoose.model<User>('User', UserSchema);
+const UserModel: Model<UserDocument> = mongoose.models.User || mongoose.model<UserDocument>('User', UserSchema);
 
 export default UserModel;
 

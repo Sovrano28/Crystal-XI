@@ -1,75 +1,110 @@
 'use client';
 
+import { useUserTeam } from '@/hooks/useTeam';
+import { useBootstrapData, useTeamData } from '@/hooks/useFPLData';
+import { TransferPlanner } from '@/components/transfers/TransferPlanner';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { cn } from '@/lib/utils';
+import Link from 'next/link';
+import { FPLTeamPicks } from '@/types/fpl';
 
 export default function TransfersPage() {
-  return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-[var(--foreground)]">
-          Transfer Planner
-        </h1>
-        <p className="text-[var(--foreground-muted)] mt-1">
-          Plan your future transfers and see fixture impact
-        </p>
+  const { fplTeamId, loading: teamIdLoading } = useUserTeam();
+  const { data: bootstrap, loading: bootstrapLoading } = useBootstrapData();
+  
+  // We need to fetch the team's picks. useTeamData fetches the general info.
+  // We need a way to get the *current* or *latest* picks.
+  // The useTeamData hook might return general info, let's allow TransferPlanner to handle specific picks fetching if needed,
+  // or we can fetch it here.
+  // Actually, useTeamData returns FPLTeamPicks (which includes picks array) based on the lib function we saw earlier?
+  // No, `fetchTeamData` in lib returns `FPLGeneralTeamData` now (I changed it).
+  // So `useTeamData` hook probably returns `FPLGeneralTeamData`.
+  // `TransferPlanner` needs `FPLTeamPicks`.
+  
+  // Let's check `useFPLData` hook implementation to be sure.
+  // Assuming we might need to fetch picks separately or the hook handles it.
+  // For now, I'll assume we need to fetch picks.
+  
+  // Wait, I can't check the hook right now without viewing it.
+  // Let's start by creating the page with loading states and fetching what we can.
+  // I'll fetch picks inside a useEffect if the hook doesn't provide it.
+  
+  return <TransfersPageContent fplTeamId={fplTeamId} teamIdLoading={teamIdLoading} bootstrap={bootstrap} bootstrapLoading={bootstrapLoading} />;
+}
+
+import { useEffect, useState } from 'react';
+
+function TransfersPageContent({ fplTeamId, teamIdLoading, bootstrap, bootstrapLoading }: any) {
+  const [picks, setPicks] = useState<FPLTeamPicks | null>(null);
+  const [picksLoading, setPicksLoading] = useState(false);
+
+  useEffect(() => {
+    async function fetchPicks() {
+      if (!fplTeamId || !bootstrap) return;
+      
+      setPicksLoading(true);
+      try {
+        const currentEvent = bootstrap.events.find((e: any) => e.is_current)?.id || 1;
+        const res = await fetch(`/api/fpl/team/${fplTeamId}`);
+        const data = await res.json();
+        
+        // The API route now returns { ...picksData, entry_history: ... }
+        // So it matches FPLTeamPicks interface roughly
+        setPicks(data);
+      } catch (err) {
+        console.error("Error fetching picks", err);
+      } finally {
+        setPicksLoading(false);
+      }
+    }
+    
+    fetchPicks();
+  }, [fplTeamId, bootstrap]);
+
+  const isLoading = teamIdLoading || bootstrapLoading || picksLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[600px]">
+        <div className="inline-block w-12 h-12 border-4 border-[var(--pl-magenta)] border-t-transparent rounded-full animate-spin" />
       </div>
+    );
+  }
 
-      {/* Coming Soon Card */}
-      <Card className="text-center py-16">
-        <div className="max-w-md mx-auto">
-          {/* Icon */}
-          <div className="relative w-24 h-24 mx-auto mb-8">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[var(--pl-magenta)] to-[var(--pl-purple)] opacity-20 blur-xl animate-pulse" />
-            <div className="relative w-full h-full rounded-2xl bg-gradient-to-br from-[var(--pl-magenta)] to-[var(--pl-purple)] flex items-center justify-center">
-              <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-            </div>
-          </div>
+  if (!fplTeamId) {
+    return (
+      <div className="flex items-center justify-center min-h-[600px]">
+        <Card className="text-center p-8 max-w-md">
+           <h2 className="text-xl font-bold mb-4">No Team Connected</h2>
+           <p className="text-[var(--foreground-muted)] mb-6">
+             Please connect your FPL team ID to use the transfer planner.
+           </p>
+           <Link href="/dashboard/team">
+             <Button variant="glow">Connect Team</Button>
+           </Link>
+        </Card>
+      </div>
+    );
+  }
 
-          <span className="inline-block px-3 py-1 rounded-full bg-[var(--pl-cyan)]/10 text-[var(--pl-cyan)] text-sm font-medium mb-4 animate-pulse">
-            Coming Soon
-          </span>
+  if (!bootstrap || !picks) {
+     return <div>Error loading data</div>;
+  }
 
-          <h2 className="text-2xl font-bold text-[var(--foreground)] mb-4">
-            Transfer Planner
-          </h2>
-          
-          <p className="text-[var(--foreground-muted)] mb-8 leading-relaxed">
-            Plan your transfers for future gameweeks. Search for players, compare fixtures, 
-            and see how transfers impact your team's fixture difficulty rating.
-          </p>
-
-          {/* Features Preview */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            {[
-              { icon: '🔍', label: 'Player Search' },
-              { icon: '📊', label: 'FDR Comparison' },
-              { icon: '💰', label: 'Budget Tracking' },
-              { icon: '📅', label: 'Future GW Planning' },
-            ].map((feature) => (
-              <div
-                key={feature.label}
-                className={cn(
-                  'p-3 rounded-xl',
-                  'bg-[var(--surface)] border border-[var(--surface-border)]',
-                  'text-sm text-[var(--foreground-secondary)]'
-                )}
-              >
-                <span className="mr-2">{feature.icon}</span>
-                {feature.label}
-              </div>
-            ))}
-          </div>
-
-          <Button variant="secondary" disabled>
-            Notify Me When Ready
-          </Button>
-        </div>
-      </Card>
+  return (
+    <div className="h-full flex flex-col">
+       <div className="mb-6">
+         <h1 className="text-2xl font-bold text-[var(--foreground)]">Transfer Planner</h1>
+         <p className="text-[var(--foreground-muted)]">Plan your transfers for Gameweek {picks.entry_history.event + 1}</p>
+       </div>
+       
+       <div className="flex-1">
+         <TransferPlanner 
+            initialPicks={picks} 
+            bootstrap={bootstrap} 
+            teamId={parseInt(fplTeamId)} 
+         />
+       </div>
     </div>
   );
 }

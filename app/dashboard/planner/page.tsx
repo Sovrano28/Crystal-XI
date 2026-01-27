@@ -20,7 +20,7 @@ export default function PlannerPage() {
   const { fplTeamId, loading: teamLoading } = useUserTeam();
   const { data: bootstrap, loading: bootstrapLoading } = useBootstrapData();
   const { data: teamData, loading: teamDataLoading } = useTeamData(fplTeamId);
-  const { currentGameweek, remainingGameweeks } = useGameweeks();
+  const { planningGameweek, remainingGameweeks } = useGameweeks();
   
   const [players, setPlayers] = useState<PlayerWithFixtures[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,16 +29,94 @@ export default function PlannerPage() {
   // View state
   const [viewMode, setViewMode] = useState<'pitch' | 'grid'>('grid');
   const [selectedGameweeks, setSelectedGameweeks] = useState<number[]>([]);
-  const [singleSelectedGW, setSingleSelectedGW] = useState<number>(currentGameweek || 1);
+  const [singleSelectedGW, setSingleSelectedGW] = useState<number>(planningGameweek || 1);
 
   // Initialize selected gameweeks
   useEffect(() => {
     if (remainingGameweeks.length > 0 && selectedGameweeks.length === 0) {
       const next5 = remainingGameweeks.slice(0, 5).map((gw) => gw.id);
       setSelectedGameweeks(next5);
-      setSingleSelectedGW(next5[0] || currentGameweek || 1);
+      setSingleSelectedGW(next5[0] || planningGameweek || 1);
     }
-  }, [remainingGameweeks, selectedGameweeks.length, currentGameweek]);
+  }, [remainingGameweeks, selectedGameweeks.length, planningGameweek]);
+  
+  // Interactive State
+  const [captainId, setCaptainId] = useState<number | undefined>(undefined);
+  const [viceCaptainId, setViceCaptainId] = useState<number | undefined>(undefined);
+  const [substitutionMode, setSubstitutionMode] = useState<number | null>(null);
+
+  // Initialize captaincy from picks
+  useEffect(() => {
+    if (teamData?.picks) {
+      const captain = teamData.picks.find(p => p.is_captain);
+      const vice = teamData.picks.find(p => p.is_vice_captain);
+      if (captain) setCaptainId(captain.element);
+      if (vice) setViceCaptainId(vice.element);
+    }
+  }, [teamData]);
+
+  // Handle Captain Change
+  const handleCaptainChange = (playerId: number, isCaptain: boolean) => {
+    if (isCaptain) {
+      // If promoting Vice to Captain, clear Vice
+      if (playerId === viceCaptainId) setViceCaptainId(undefined);
+      setCaptainId(playerId);
+    } else {
+      // If promoting Captain to Vice, clear Captain
+      if (playerId === captainId) setCaptainId(undefined);
+      setViceCaptainId(playerId);
+    }
+  };
+
+  // Handle Substitution Logic
+  const handleSubstitute = (playerId: number) => {
+    // If no player selected, select this one
+    if (substitutionMode === null) {
+      setSubstitutionMode(playerId);
+      return;
+    }
+
+    // If clicking same player, deselect
+    if (substitutionMode === playerId) {
+      setSubstitutionMode(null);
+      return;
+    }
+
+    // Perform substitution
+    const newPlayers = [...players];
+    const player1Index = newPlayers.findIndex(p => p.id === substitutionMode);
+    const player2Index = newPlayers.findIndex(p => p.id === playerId);
+
+    if (player1Index === -1 || player2Index === -1) {
+       setSubstitutionMode(null);
+       return;
+    }
+
+    // Swap players in the array
+    const temp = newPlayers[player1Index];
+    newPlayers[player1Index] = newPlayers[player2Index];
+    newPlayers[player2Index] = temp;
+
+    // Validate Formation
+    if (isValidFormation(newPlayers)) {
+      setPlayers(newPlayers);
+    } else {
+      // Warn user (could use a toast here)
+      alert("Invalid formation! You need 1 GK, at least 3 DEFs, and at least 1 FWD.");
+    }
+    
+    setSubstitutionMode(null);
+  };
+
+  // Formation Validator
+  const isValidFormation = (newLineup: PlayerWithFixtures[]) => {
+    const starters = newLineup.slice(0, 11);
+    const gk = starters.filter(p => p.element_type === 1).length;
+    const def = starters.filter(p => p.element_type === 2).length;
+    const fwd = starters.filter(p => p.element_type === 4).length;
+
+    return gk === 1 && def >= 3 && fwd >= 1;
+  };
 
   useEffect(() => {
     async function loadPlayerFixtures() {
@@ -191,40 +269,45 @@ export default function PlannerPage() {
         <ViewToggle view={viewMode} onViewChange={setViewMode} />
       </div>
 
-      {/* Quick Jump Buttons */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-        <span className="text-sm font-medium text-[var(--foreground-muted)]">Quick select:</span>
-        <QuickJumpButtons
-          currentGameweek={currentGameweek || 1}
-          totalGameweeks={38}
-          onQuickJump={setSelectedGameweeks}
-        />
-      </div>
-
       {/* Gameweek Slider */}
-      <GameweekSlider
-        gameweeks={allGameweeks}
-        currentGameweek={currentGameweek || 1}
-        selectedGameweeks={viewMode === 'pitch' ? [singleSelectedGW] : selectedGameweeks}
-        onSelectionChange={(gws) => {
-          if (viewMode === 'pitch') {
-            setSingleSelectedGW(gws[0] || currentGameweek || 1);
-          } else {
-            setSelectedGameweeks(gws);
-          }
-        }}
-        onSingleSelect={setSingleSelectedGW}
-        mode={viewMode === 'pitch' ? 'single' : 'range'}
-      />
+      <div className="space-y-4">
+        <GameweekSlider
+          gameweeks={allGameweeks}
+          currentGameweek={planningGameweek || 1}
+          selectedGameweeks={viewMode === 'pitch' ? [singleSelectedGW] : selectedGameweeks}
+          onSelectionChange={(gws) => {
+            if (viewMode === 'pitch') {
+              setSingleSelectedGW(gws[0] || planningGameweek || 1);
+            } else {
+              setSelectedGameweeks(gws);
+            }
+          }}
+          onSingleSelect={setSingleSelectedGW}
+          mode={viewMode === 'pitch' ? 'single' : 'range'}
+        />
 
-      {/* FDR Heatmap */}
-      <FDRHeatmap players={players} gameweeks={selectedGameweeks} />
+        {/* Quick Jump Buttons - Moved closer to the view */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-center gap-4">
+          <span className="text-sm font-medium text-[var(--foreground-muted)]">Quick select:</span>
+          <QuickJumpButtons
+            currentGameweek={planningGameweek || 1}
+            totalGameweeks={38}
+            onQuickJump={setSelectedGameweeks}
+          />
+        </div>
+      </div>
 
       {/* Main View */}
       {viewMode === 'pitch' ? (
         <PitchView
           players={players}
+          teams={bootstrap?.teams || []}
           selectedGameweek={singleSelectedGW}
+          captainId={captainId}
+          viceCaptainId={viceCaptainId}
+          onCaptainChange={handleCaptainChange}
+          substitutionMode={substitutionMode}
+          onSubstitute={handleSubstitute}
         />
       ) : (
         <EnhancedGameweekGrid

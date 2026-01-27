@@ -6,6 +6,10 @@ import {
   FPLTeam,
   PlayerFixture,
   PlayerWithFixtures,
+  FPLGeneralTeamData,
+  FPLEvent,
+  PlayerPoints,
+  PlayerWithPoints,
 } from '@/types/fpl';
 
 const FPL_API_BASE = 'https://fantasy.premierleague.com/api';
@@ -63,7 +67,7 @@ export async function fetchBootstrapDynamic() {
   }
 }
 
-export async function fetchTeamData(teamId: number): Promise<FPLTeamPicks> {
+export async function fetchTeamData(teamId: number): Promise<FPLGeneralTeamData> {
   try {
     const response = await fetch(`${FPL_API_BASE}/entry/${teamId}/`, {
       next: { revalidate: 60 }, // Revalidate every minute
@@ -192,17 +196,85 @@ export function getPlayerFixtures(
   playerTeamId: number,
   fixtures: FPLFixture[],
   teams: FPLTeam[],
-  currentGameweek: number
+  currentGameweek: number,
+  events?: FPLEvent[]
 ): PlayerFixture[] {
   const playerFixtures: PlayerFixture[] = [];
 
+  // Helper function to determine gameweek from kickoff time if event is null
+  const getGameweekFromKickoff = (kickoffTime: string | null | undefined): number | null => {
+    if (!kickoffTime || !events || events.length === 0) return null;
+    
+    try {
+      const kickoff = new Date(kickoffTime);
+      if (isNaN(kickoff.getTime())) return null;
+      
+      // Sort events by deadline to ensure correct order
+      const sortedEvents = [...events].sort((a, b) => a.id - b.id);
+      
+      // Find the gameweek where the kickoff time falls between its deadline and the next gameweek's deadline
+      for (let i = 0; i < sortedEvents.length; i++) {
+        const event = sortedEvents[i];
+        const deadline = new Date(event.deadline_time);
+        
+        if (isNaN(deadline.getTime())) continue;
+        
+        // If this is the last event, check if kickoff is after its deadline
+        if (i === sortedEvents.length - 1) {
+          if (kickoff >= deadline) {
+            return event.id;
+          }
+        } else {
+          const nextEvent = sortedEvents[i + 1];
+          const nextDeadline = new Date(nextEvent.deadline_time);
+          
+          if (isNaN(nextDeadline.getTime())) continue;
+          
+          if (kickoff >= deadline && kickoff < nextDeadline) {
+            return event.id;
+          }
+        }
+      }
+      
+      // If kickoff is before all deadlines, assign to the first upcoming gameweek
+      const upcomingEvents = sortedEvents.filter(e => e.id >= currentGameweek && !e.finished);
+      if (upcomingEvents.length > 0) {
+        const firstUpcoming = upcomingEvents[0];
+        const firstDeadline = new Date(firstUpcoming.deadline_time);
+        if (!isNaN(firstDeadline.getTime()) && kickoff < firstDeadline) {
+          return firstUpcoming.id;
+        }
+      }
+    } catch (error) {
+      console.error('Error determining gameweek from kickoff time:', error);
+    }
+    
+    return null;
+  };
+
   // Filter fixtures for this player's team and future gameweeks
-  const relevantFixtures = fixtures.filter(
-    (fixture) =>
-      (fixture.team_h === playerTeamId || fixture.team_a === playerTeamId) &&
-      fixture.event >= currentGameweek &&
-      !fixture.finished
-  );
+  const relevantFixtures = fixtures.filter((fixture) => {
+    // Check if fixture is for this player's team
+    if (fixture.team_h !== playerTeamId && fixture.team_a !== playerTeamId) {
+      return false;
+    }
+    
+    // Skip finished fixtures
+    if (fixture.finished) {
+      return false;
+    }
+    
+    // Determine the gameweek for this fixture
+    let fixtureGameweek: number | null = fixture.event;
+    
+    // If event is null/undefined, try to determine from kickoff time
+    if (!fixtureGameweek && fixture.kickoff_time) {
+      fixtureGameweek = getGameweekFromKickoff(fixture.kickoff_time);
+    }
+    
+    // Only include fixtures with a valid gameweek >= currentGameweek
+    return fixtureGameweek !== null && fixtureGameweek >= currentGameweek;
+  });
 
   for (const fixture of relevantFixtures) {
     const isHome = fixture.team_h === playerTeamId;
@@ -210,8 +282,19 @@ export function getPlayerFixtures(
     const opponent = teams.find((team) => team.id === opponentId);
 
     if (opponent) {
+      // Determine gameweek (use event if available, otherwise calculate from kickoff)
+      let fixtureGameweek = fixture.event;
+      if (!fixtureGameweek && fixture.kickoff_time && events) {
+        fixtureGameweek = getGameweekFromKickoff(fixture.kickoff_time) || currentGameweek;
+      }
+      
+      // Fallback to currentGameweek if still null (shouldn't happen after filter, but safety check)
+      if (!fixtureGameweek) {
+        fixtureGameweek = currentGameweek;
+      }
+
       playerFixtures.push({
-        gameweek: fixture.event,
+        gameweek: fixtureGameweek,
         opponent,
         isHome,
         difficulty: isHome ? fixture.team_h_difficulty : fixture.team_a_difficulty,
@@ -243,7 +326,8 @@ export async function getPlayersWithFixtures(
       player.team,
       fixtures,
       bootstrap.teams,
-      currentGameweek
+      currentGameweek,
+      bootstrap.events
     );
 
     players.push({
@@ -256,11 +340,139 @@ export async function getPlayersWithFixtures(
 }
 
 /**
- * Get current gameweek number
+ * Get planning gameweek number (for fixture planning - uses next gameweek if deadline has passed)
+ */
+export function getPlanningGameweek(events: FPLEvent[]): number {
+  const currentEvent = events.find((e) => e.is_current);
+  const nextEvent = events.find((e) => e.is_next);
+
+  if (!currentEvent) return 1;
+
+  const deadline = new Date(currentEvent.deadline_time);
+  const now = new Date();
+
+  // If deadline has passed, use next gameweek for planning
+  if (now >= deadline && nextEvent) {
+    return nextEvent.id;
+  }
+
+  return currentEvent.id;
+}
+
+/**
+ * Get scoring gameweek number (the gameweek for which points are being accumulated)
+ */
+export function getScoringGameweek(events: FPLEvent[]): number {
+  const currentEvent = events.find((e) => e.is_current);
+  return currentEvent?.id || 1;
+}
+
+/**
+ * Get current gameweek number (legacy - returns planning gameweek for backward compatibility)
  */
 export async function getCurrentGameweek(): Promise<number> {
   const bootstrap = await fetchBootstrapStatic();
-  const currentEvent = bootstrap.events.find((event) => event.is_current);
-  return currentEvent?.id || 1;
+  return getPlanningGameweek(bootstrap.events);
+}
+
+/**
+ * Fetch player summary data from FPL API
+ */
+export async function fetchPlayerSummary(playerId: number) {
+  try {
+    const response = await fetch(`${FPL_API_BASE}/element-summary/${playerId}/`, {
+      next: { revalidate: 300 }, // Revalidate every 5 minutes
+    });
+
+    if (!response.ok) {
+      throw new Error(`FPL API error: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
+ * Get player points for a specific gameweek
+ */
+export async function getPlayerPointsForGameweek(
+  playerId: number,
+  gameweek: number
+): Promise<PlayerPoints | null> {
+  try {
+    const summary = await fetchPlayerSummary(playerId);
+    
+    if (!summary.history || !Array.isArray(summary.history)) {
+      return null;
+    }
+
+    const gameweekData = summary.history.find((h: any) => h.round === gameweek);
+    
+    if (!gameweekData) {
+      return null;
+    }
+
+    return {
+      gameweek: gameweekData.round,
+      total_points: gameweekData.total_points || 0,
+      minutes: gameweekData.minutes || 0,
+      goals_scored: gameweekData.goals_scored || 0,
+      assists: gameweekData.assists || 0,
+      clean_sheets: gameweekData.clean_sheets || 0,
+      goals_conceded: gameweekData.goals_conceded || 0,
+      yellow_cards: gameweekData.yellow_cards || 0,
+      red_cards: gameweekData.red_cards || 0,
+      saves: gameweekData.saves || 0,
+      bonus: gameweekData.bonus || 0,
+      bps: gameweekData.bps || 0,
+      influence: gameweekData.influence || '0.0',
+      creativity: gameweekData.creativity || '0.0',
+      threat: gameweekData.threat || '0.0',
+      ict_index: gameweekData.ict_index || '0.0',
+      starts: gameweekData.starts || 0,
+      expected_goals: gameweekData.expected_goals || '0.0',
+      expected_assists: gameweekData.expected_assists || '0.0',
+      expected_goal_involvements: gameweekData.expected_goal_involvements || '0.0',
+      expected_goals_conceded: gameweekData.expected_goals_conceded || '0.0',
+      value: gameweekData.value || 0,
+      transfers_balance: gameweekData.transfers_balance || 0,
+      selected: gameweekData.selected || 0,
+      transfers_in: gameweekData.transfers_in || 0,
+      transfers_out: gameweekData.transfers_out || 0,
+    };
+  } catch (error) {
+    console.error(`Error fetching points for player ${playerId} in gameweek ${gameweek}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Get all players with their points for a specific gameweek
+ */
+export async function getPlayersWithPoints(
+  playerIds: number[],
+  gameweek: number
+): Promise<PlayerWithPoints[]> {
+  const bootstrap = await fetchBootstrapStatic();
+  const players: PlayerWithPoints[] = [];
+
+  // Fetch all player points in parallel
+  const pointsPromises = playerIds.map(async (playerId) => {
+    const player = bootstrap.elements.find((p) => p.id === playerId);
+    if (!player) return null;
+
+    const points = await getPlayerPointsForGameweek(playerId, gameweek);
+
+    return {
+      ...player,
+      gameweekPoints: points || undefined,
+    };
+  });
+
+  const results = await Promise.all(pointsPromises);
+  
+  return results.filter((p): p is PlayerWithPoints => p !== null);
 }
 
