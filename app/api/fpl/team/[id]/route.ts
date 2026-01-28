@@ -8,6 +8,10 @@ export async function GET(
   try {
     const { id } = await params;
     const teamId = parseInt(id);
+    
+    // Get mode from query string: 'planner' uses next GW picks, default uses current GW
+    const { searchParams } = new URL(request.url);
+    const mode = searchParams.get('mode') || 'default';
 
     if (isNaN(teamId)) {
       return NextResponse.json({ error: 'Invalid team ID' }, { status: 400 });
@@ -15,7 +19,32 @@ export async function GET(
 
     // Get current gameweek
     const bootstrap = await fetchBootstrapStatic();
-    const currentEvent = bootstrap.events.find((event) => event.is_current);
+    const currentEvent = bootstrap.events.find((event: { is_current: boolean }) => event.is_current);
+    const nextEvent = bootstrap.events.find((event: { is_next: boolean }) => event.is_next);
+    
+    // Determine which gameweek to fetch picks from based on mode
+    // For 'planner' mode: 
+    //   - If current GW deadline has NOT passed: use current GW picks (user's "Pick Team" squad)
+    //   - If current GW deadline HAS passed: use next GW picks
+    // For 'default' mode: always use current GW (for scoring/points display)
+    
+    let targetEvent = currentEvent;
+    
+    if (mode === 'planner' && currentEvent) {
+      const deadlineTime = new Date(currentEvent.deadline_time);
+      const now = new Date();
+      const deadlinePassed = now > deadlineTime;
+      
+      console.log(`[Team API] Current GW${currentEvent.id} deadline: ${deadlineTime.toISOString()}, Now: ${now.toISOString()}, Passed: ${deadlinePassed}`);
+      
+      // Only use next GW if deadline has passed AND next event exists
+      if (deadlinePassed && nextEvent) {
+        targetEvent = nextEvent;
+      }
+      // Otherwise keep using current GW (user's "Pick Team" squad is here)
+    }
+    
+    console.log(`[Team API] Mode: ${mode}, Using gameweek: ${targetEvent?.id} (current: ${currentEvent?.id}, next: ${nextEvent?.id})`);
     
     // Fetch general team data first - this has current team value and bank at root level
     const generalTeamData = await fetchTeamData(teamId);
@@ -76,11 +105,35 @@ export async function GET(
       event: finalEntryHistory?.event,
     });
     
-    if (currentEvent) {
-      // Fetch picks for current gameweek
+    if (targetEvent) {
+      // Fetch picks for target gameweek
+      // For planner mode, if next GW picks don't exist, fall back to current GW
+      let picksData = null;
+      let actualGameweekUsed = targetEvent.id;
+      
       try {
-        const picksData = await fetchTeamPicks(teamId, currentEvent.id);
-        console.log(`[Team API] Picks data entry_history for team ${teamId}:`, {
+        picksData = await fetchTeamPicks(teamId, targetEvent.id);
+      } catch (error) {
+        // If in planner mode and next GW picks failed, try current GW
+        if (mode === 'planner' && currentEvent && targetEvent.id !== currentEvent.id) {
+          console.log(`[Team API] Next GW picks not available, falling back to current GW ${currentEvent.id}`);
+          try {
+            picksData = await fetchTeamPicks(teamId, currentEvent.id);
+            actualGameweekUsed = currentEvent.id;
+          } catch (fallbackError) {
+            console.error('Error fetching picks (fallback):', fallbackError);
+            throw fallbackError;
+          }
+        } else {
+          throw error;
+        }
+      }
+      
+      if (!picksData) {
+        throw new Error('Failed to fetch team picks');
+      }
+      
+      console.log(`[Team API] Picks data entry_history for team ${teamId}:`, {
           value: picksData.entry_history?.value,
           bank: picksData.entry_history?.bank,
           event: picksData.entry_history?.event,
@@ -92,7 +145,7 @@ export async function GET(
           console.error(`[Team API] WARNING: finalEntryHistory is null for team ${teamId}! This should not happen.`);
           // As last resort, try to construct from general team data root values
           finalEntryHistory = {
-            event: currentEvent.id,
+            event: targetEvent.id,
             points: picksData.entry_history?.points || 0,
             total_points: generalTeamData?.summary_overall_points || picksData.entry_history?.total_points || 0,
             bank: generalTeamData?.last_deadline_bank ?? picksData.entry_history?.bank ?? 0,
@@ -110,15 +163,6 @@ export async function GET(
           ...picksData,
           entry_history: finalEntryHistory,
         });
-      } catch (picksError) {
-        // If picks fetch fails, return general team data with current entry_history
-        console.error('Error fetching picks:', picksError);
-        return NextResponse.json({
-          ...generalTeamData,
-          entry_history: finalEntryHistory,
-          picks: [],
-        });
-      }
     }
 
     // If no current gameweek, return general team data with current entry_history

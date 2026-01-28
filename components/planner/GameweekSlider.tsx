@@ -51,19 +51,54 @@ export function GameweekSlider({
     }
   };
 
-  const scrollLeft = () => {
-    scrollRef.current?.scrollBy({ left: -200, behavior: 'smooth' });
+  // Navigate to previous gameweek (for single mode)
+  const goToPrevious = () => {
+    if (mode === 'single' && selectedGameweeks.length > 0) {
+      const currentSelected = selectedGameweeks[0];
+      const prevGw = gameweeks.find((gw) => gw < currentSelected);
+      const prevGwFinal = gameweeks.filter((gw) => gw < currentSelected).pop();
+      if (prevGwFinal !== undefined) {
+        onSingleSelect?.(prevGwFinal);
+        onSelectionChange([prevGwFinal]);
+        // Scroll to the new selection
+        setTimeout(() => {
+          const el = scrollRef.current?.querySelector(`[data-gw="${prevGwFinal}"]`);
+          el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }, 100);
+      }
+    } else {
+      scrollRef.current?.scrollBy({ left: -200, behavior: 'smooth' });
+    }
   };
 
-  const scrollRight = () => {
-    scrollRef.current?.scrollBy({ left: 200, behavior: 'smooth' });
+  // Navigate to next gameweek (for single mode)
+  const goToNext = () => {
+    if (mode === 'single' && selectedGameweeks.length > 0) {
+      const currentSelected = selectedGameweeks[0];
+      const nextGw = gameweeks.find((gw) => gw > currentSelected);
+      if (nextGw !== undefined) {
+        onSingleSelect?.(nextGw);
+        onSelectionChange([nextGw]);
+        // Scroll to the new selection
+        setTimeout(() => {
+          const el = scrollRef.current?.querySelector(`[data-gw="${nextGw}"]`);
+          el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }, 100);
+      }
+    } else {
+      scrollRef.current?.scrollBy({ left: 200, behavior: 'smooth' });
+    }
   };
+
+  const canGoPrev = selectedGameweeks.length > 0 && selectedGameweeks[0] > gameweeks[0];
+  const canGoNext = selectedGameweeks.length > 0 && selectedGameweeks[0] < gameweeks[gameweeks.length - 1];
 
   return (
     <div className="relative">
-      {/* Scroll Buttons */}
+      {/* Navigation Buttons */}
       <button
-        onClick={scrollLeft}
+        onClick={goToPrevious}
+        disabled={!canGoPrev}
         className={cn(
           'absolute left-0 top-1/2 -translate-y-1/2 z-10',
           'w-10 h-10 rounded-xl',
@@ -74,6 +109,7 @@ export function GameweekSlider({
           'shadow-[var(--shadow-md)]',
           'transition-all duration-200',
           'hover:shadow-[var(--shadow-lg)]',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
           'hidden md:flex'
         )}
       >
@@ -83,7 +119,8 @@ export function GameweekSlider({
       </button>
 
       <button
-        onClick={scrollRight}
+        onClick={goToNext}
+        disabled={!canGoNext}
         className={cn(
           'absolute right-0 top-1/2 -translate-y-1/2 z-10',
           'w-10 h-10 rounded-xl',
@@ -94,6 +131,7 @@ export function GameweekSlider({
           'shadow-[var(--shadow-md)]',
           'transition-all duration-200',
           'hover:shadow-[var(--shadow-lg)]',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
           'hidden md:flex'
         )}
       >

@@ -143,9 +143,14 @@ interface PlayerPointsCardProps {
 function PlayerPointsCard({ player, teamShortName, gameweek, onClick, isSub }: PlayerPointsCardProps) {
   const points = player.gameweekPoints;
   const hasPlayed = points && points.minutes > 0;
-  const totalPoints = points?.total_points || 0;
+  const basePoints = points?.total_points || 0;
+  
+  // Apply captain multiplier (2x for captain, 2x for VC if captain didn't play)
+  // Note: For VC multiplier logic, we'd need access to captain's data which is handled at parent level
+  // Here we just apply 2x if player is captain
+  const displayPoints = player.is_captain ? basePoints * 2 : basePoints;
 
-  // Determine badge color based on points
+  // Determine badge color based on points (using display points for color)
   const getPointsColor = (pts: number): string => {
     if (pts === 0 || !hasPlayed) return 'bg-gray-500';
     if (pts >= 8) return 'bg-green-500';
@@ -228,7 +233,10 @@ function PlayerPointsCard({ player, teamShortName, gameweek, onClick, isSub }: P
     return (
       <div className="text-center max-w-xs">
         <p className="font-medium">{player.web_name}</p>
-        <p className="text-lg font-bold mt-1">{totalPoints} pts</p>
+        <p className="text-lg font-bold mt-1">{displayPoints} pts</p>
+        {player.is_captain && (
+          <p className="text-xs text-[var(--pl-magenta)] font-medium">Captain (points ×2)</p>
+        )}
         {breakdown.length > 0 ? (
           <div className="mt-2 text-xs text-left space-y-1">
             {breakdown.map((item, idx) => (
@@ -253,8 +261,8 @@ function PlayerPointsCard({ player, teamShortName, gameweek, onClick, isSub }: P
     badgeContent = 'Not Played';
     badgeColorClass = 'bg-gray-500';
   } else {
-    badgeContent = `${totalPoints} pts`;
-    badgeColorClass = getPointsColor(totalPoints);
+    badgeContent = `${displayPoints} pts`;
+    badgeColorClass = getPointsColor(displayPoints);
   }
 
   return (

@@ -55,10 +55,15 @@ export function useFixtures() {
   return { data, loading, error };
 }
 
-export function useTeamData(teamId: number | null) {
+export function useTeamData(teamId: number | null, mode: 'default' | 'planner' = 'default') {
   const [data, setData] = useState<FPLTeamPicks | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refetch = () => {
+    setRefreshKey((prev) => prev + 1);
+  };
 
   useEffect(() => {
     if (!teamId) {
@@ -69,7 +74,8 @@ export function useTeamData(teamId: number | null) {
     async function fetchData() {
       try {
         setLoading(true);
-        const response = await fetch(`/api/fpl/team/${teamId}`);
+        const url = `/api/fpl/team/${teamId}${mode === 'planner' ? '?mode=planner' : ''}`;
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch team data');
         const json = await response.json();
         setData(json);
@@ -82,8 +88,8 @@ export function useTeamData(teamId: number | null) {
     }
 
     fetchData();
-  }, [teamId]);
+  }, [teamId, mode, refreshKey]);
 
-  return { data, loading, error };
+  return { data, loading, error, refetch };
 }
 

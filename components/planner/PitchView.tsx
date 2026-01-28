@@ -12,15 +12,22 @@ interface PitchViewProps {
   teams: FPLTeam[];
   selectedGameweek: number;
   onPlayerClick?: (player: PlayerWithFixtures) => void;
-  // New Props
+  // Captaincy Props
   captainId?: number;
   viceCaptainId?: number;
   onCaptainChange?: (playerId: number, isCaptain: boolean) => void; // true=Captain, false=Vice
+  // Substitution Props
   substitutionMode?: number | null; // ID of selected player for sub
   onSubstitute?: (playerId: number) => void;
   enableCaptaincyOptions?: boolean;
   showAllPlayers?: boolean;
   onRemove?: (playerId: number) => void;
+  // Navigation Props
+  onPrevWeek?: () => void;
+  onNextWeek?: () => void;
+  showNavigation?: boolean;
+  canGoPrev?: boolean;
+  canGoNext?: boolean;
 }
 
 // Standard 4-4-2 formation positions
@@ -44,6 +51,11 @@ export function PitchView({
   showAllPlayers = false,
   onRemove,
   onCaptainChange,
+  onPrevWeek,
+  onNextWeek,
+  showNavigation = false,
+  canGoPrev = false,
+  canGoNext = false,
 }: PitchViewProps) {
   // Filter for empty slots (placeholders have id < 0)
   const isEmptySlot = (p: PlayerWithFixtures) => p.id < 0;
@@ -76,144 +88,209 @@ export function PitchView({
   };
 
   return (
-    <div className="relative">
-      {/* Pitch Container */}
-      <div
-        className={cn(
-          'relative rounded-2xl overflow-hidden',
-          'bg-gradient-to-b from-green-600 via-green-500 to-green-600',
-          'p-4 md:p-8',
-          'shadow-inner border-2 border-green-700'
-        )}
-      >
-        {/* Pitch Lines */}
-        <div className="absolute inset-0 opacity-30 pointer-events-none">
-          {/* Center line */}
-          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/80" />
-          {/* Center circle */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border-2 border-white/80 rounded-full" />
-          {/* Penalty areas */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-20 border-2 border-white/80 border-t-0" />
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 h-20 border-2 border-white/80 border-b-0" />
-          {/* Grass texture/stripes effect overlay */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.05)_50%,transparent_50%)] bg-[length:100%_40px]" />
-        </div>
-
-        {/* Players Grid */}
-        <div className="relative z-10 space-y-8 md:space-y-10 py-4">
-          {/* Forwards */}
-          <div className="flex justify-center gap-8 md:gap-12">
-            {startersByPosition.fwd.map((player) => (
-              <PlayerPitchCard
-                key={player.id}
-                player={player}
-                teamShortName={getTeamShortName(player.team)}
-                gameweek={selectedGameweek}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSubstitute?.(player.id);
-                }}
-                isSub={false}
-                isCaptain={player.id === captainId}
-                isViceCaptain={player.id === viceCaptainId}
-                isSelected={substitutionMode === player.id}
-                onCaptainSelect={() => onCaptainChange?.(player.id, true)}
-                onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
-              />
-            ))}
+    <div className="relative flex flex-col lg:flex-row lg:items-stretch gap-4 lg:gap-6">
+      {/* PITCH SECTION - Takes ~65% on desktop, matches sidebar height */}
+      <div className="flex-1 lg:max-w-[65%] flex">
+        {/* Pitch Container */}
+        <div
+          className={cn(
+            'relative rounded-2xl overflow-hidden flex-1',
+            'bg-gradient-to-b from-green-600 via-green-500 to-green-600',
+            'p-3 md:p-4',
+            'shadow-inner border-2 border-green-700',
+            'flex flex-col justify-between'
+          )}
+        >
+          {/* Pitch Lines */}
+          <div className="absolute inset-0 opacity-30 pointer-events-none">
+            {/* Center line */}
+            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/80" />
+            {/* Center circle */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 border-2 border-white/80 rounded-full" />
+            {/* Penalty areas */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-36 h-16 border-2 border-white/80 border-t-0" />
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-36 h-16 border-2 border-white/80 border-b-0" />
+            {/* Grass texture */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.05)_50%,transparent_50%)] bg-[length:100%_30px]" />
           </div>
 
-          {/* Midfielders */}
-          <div className="flex justify-center gap-6 md:gap-10">
-            {startersByPosition.mid.map((player) => (
-              <PlayerPitchCard
-                key={player.id}
-                player={player}
-                teamShortName={getTeamShortName(player.team)}
-                gameweek={selectedGameweek}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSubstitute?.(player.id);
-                }}
-                isSub={false}
-                isCaptain={player.id === captainId}
-                isViceCaptain={player.id === viceCaptainId}
-                isSelected={substitutionMode === player.id}
-                onCaptainSelect={() => onCaptainChange?.(player.id, true)}
-                onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
-              />
-            ))}
-          </div>
+          {/* Players Grid - evenly distributed across pitch */}
+          <div className="relative z-10 flex flex-col justify-between flex-1 py-1">
+            {/* Forwards - at the top */}
+            <div className="flex justify-center gap-4 md:gap-8">
+              {startersByPosition.fwd.map((player) => (
+                <PlayerPitchCard
+                  key={player.id}
+                  player={player}
+                  teamShortName={getTeamShortName(player.team)}
+                  gameweek={selectedGameweek}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSubstitute?.(player.id);
+                  }}
+                  isSub={false}
+                  isCaptain={player.id === captainId}
+                  isViceCaptain={player.id === viceCaptainId}
+                  isSelected={substitutionMode === player.id}
+                  onCaptainSelect={() => onCaptainChange?.(player.id, true)}
+                  onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                />
+              ))}
+            </div>
 
-          {/* Defenders */}
-          <div className="flex justify-center gap-6 md:gap-10">
-            {startersByPosition.def.map((player) => (
-              <PlayerPitchCard
-                key={player.id}
-                player={player}
-                teamShortName={getTeamShortName(player.team)}
-                gameweek={selectedGameweek}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSubstitute?.(player.id);
-                }}
-                isSub={false}
-                isCaptain={player.id === captainId}
-                isViceCaptain={player.id === viceCaptainId}
-                isSelected={substitutionMode === player.id}
-                onCaptainSelect={() => onCaptainChange?.(player.id, true)}
-                onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
-              />
-            ))}
-          </div>
+            {/* Midfielders */}
+            <div className="flex justify-center gap-3 md:gap-6">
+              {startersByPosition.mid.map((player) => (
+                <PlayerPitchCard
+                  key={player.id}
+                  player={player}
+                  teamShortName={getTeamShortName(player.team)}
+                  gameweek={selectedGameweek}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSubstitute?.(player.id);
+                  }}
+                  isSub={false}
+                  isCaptain={player.id === captainId}
+                  isViceCaptain={player.id === viceCaptainId}
+                  isSelected={substitutionMode === player.id}
+                  onCaptainSelect={() => onCaptainChange?.(player.id, true)}
+                  onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                />
+              ))}
+            </div>
 
-          {/* Goalkeeper */}
-          <div className="flex justify-center">
-            {startersByPosition.gk.map((player) => (
-              <PlayerPitchCard
-                key={player.id}
-                player={player}
-                teamShortName={getTeamShortName(player.team)}
-                gameweek={selectedGameweek}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSubstitute?.(player.id);
-                }}
-                isSub={false}
-                isCaptain={player.id === captainId}
-                isViceCaptain={player.id === viceCaptainId}
-                isSelected={substitutionMode === player.id}
-                onCaptainSelect={() => onCaptainChange?.(player.id, true)}
-                onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
-              />
-            ))}
+            {/* Defenders */}
+            <div className="flex justify-center gap-3 md:gap-6">
+              {startersByPosition.def.map((player) => (
+                <PlayerPitchCard
+                  key={player.id}
+                  player={player}
+                  teamShortName={getTeamShortName(player.team)}
+                  gameweek={selectedGameweek}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSubstitute?.(player.id);
+                  }}
+                  isSub={false}
+                  isCaptain={player.id === captainId}
+                  isViceCaptain={player.id === viceCaptainId}
+                  isSelected={substitutionMode === player.id}
+                  onCaptainSelect={() => onCaptainChange?.(player.id, true)}
+                  onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                />
+              ))}
+            </div>
+
+            {/* Goalkeeper - at the bottom near goal */}
+            <div className="flex justify-center">
+              {startersByPosition.gk.map((player) => (
+                <PlayerPitchCard
+                  key={player.id}
+                  player={player}
+                  teamShortName={getTeamShortName(player.team)}
+                  gameweek={selectedGameweek}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSubstitute?.(player.id);
+                  }}
+                  isSub={false}
+                  isCaptain={player.id === captainId}
+                  isViceCaptain={player.id === viceCaptainId}
+                  isSelected={substitutionMode === player.id}
+                  onCaptainSelect={() => onCaptainChange?.(player.id, true)}
+                  onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Substitutes Bench */}
-      {subs.length > 0 && (
-        <div className="mt-6">
-          <h4 className="text-sm font-medium text-[var(--foreground-muted)] mb-3">Substitutes</h4>
-          <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar px-2">
-            {subs.map((player) => (
-              <PlayerPitchCard
-                key={player.id}
-                player={player}
-                teamShortName={getTeamShortName(player.team)}
-                gameweek={selectedGameweek}
-                onClick={() => onSubstitute?.(player.id)}
-                isSub
-                isCaptain={player.id === captainId}
-                isViceCaptain={player.id === viceCaptainId}
-                isSelected={substitutionMode === player.id}
-                onCaptainSelect={() => onCaptainChange?.(player.id, true)}
-                onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
-              />
-            ))}
-          </div>
+      {/* RIGHT SIDEBAR - Navigation + Substitutes */}
+      <div className="lg:w-[180px] flex flex-col gap-4">
+        {/* Navigation Buttons - Always show, horizontal */}
+        <div className="flex items-center justify-center gap-3 bg-[var(--surface)] rounded-xl p-3 border border-[var(--surface-border)]">
+          <button
+            onClick={onPrevWeek}
+            disabled={!canGoPrev}
+            className={cn(
+              'p-2.5 rounded-lg',
+              'bg-[var(--surface-hover)] border border-[var(--surface-border)]',
+              'hover:bg-[var(--primary)] hover:text-white transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+            title="Previous Gameweek"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="text-sm font-medium text-[var(--foreground-muted)]">
+            GW{selectedGameweek}
+          </span>
+          <button
+            onClick={onNextWeek}
+            disabled={!canGoNext}
+            className={cn(
+              'p-2.5 rounded-lg',
+              'bg-[var(--surface-hover)] border border-[var(--surface-border)]',
+              'hover:bg-[var(--primary)] hover:text-white transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+            title="Next Gameweek"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
-      )}
+
+        {/* Substitutes - Vertical on desktop, Horizontal on mobile */}
+        {subs.length > 0 && (
+          <div className="bg-[var(--surface)] rounded-xl p-3 border border-[var(--surface-border)]">
+            <h4 className="text-xs font-semibold text-[var(--foreground-muted)] mb-3 uppercase tracking-wide text-center">
+              Substitutes
+            </h4>
+            {/* Desktop: Vertical stack, centered */}
+            <div className="hidden lg:flex flex-col items-center gap-3">
+              {subs.map((player) => (
+                <PlayerPitchCard
+                  key={player.id}
+                  player={player}
+                  teamShortName={getTeamShortName(player.team)}
+                  gameweek={selectedGameweek}
+                  onClick={() => onSubstitute?.(player.id)}
+                  isSub
+                  isCaptain={player.id === captainId}
+                  isViceCaptain={player.id === viceCaptainId}
+                  isSelected={substitutionMode === player.id}
+                  onCaptainSelect={() => onCaptainChange?.(player.id, true)}
+                  onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                />
+              ))}
+            </div>
+            {/* Mobile: Horizontal scroll, centered */}
+            <div className="flex lg:hidden justify-center gap-3 overflow-x-auto pb-2 hide-scrollbar">
+              {subs.map((player) => (
+                <PlayerPitchCard
+                  key={player.id}
+                  player={player}
+                  teamShortName={getTeamShortName(player.team)}
+                  gameweek={selectedGameweek}
+                  onClick={() => onSubstitute?.(player.id)}
+                  isSub
+                  isCaptain={player.id === captainId}
+                  isViceCaptain={player.id === viceCaptainId}
+                  isSelected={substitutionMode === player.id}
+                  onCaptainSelect={() => onCaptainChange?.(player.id, true)}
+                  onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

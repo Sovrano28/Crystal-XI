@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useBootstrapData, useTeamData } from '@/hooks/useFPLData';
 import { useUserTeam } from '@/hooks/useTeam';
@@ -19,12 +19,14 @@ export default function PlannerPage() {
   const { data: session } = useSession();
   const { fplTeamId, loading: teamLoading } = useUserTeam();
   const { data: bootstrap, loading: bootstrapLoading } = useBootstrapData();
-  const { data: teamData, loading: teamDataLoading } = useTeamData(fplTeamId);
+  // Use 'planner' mode to fetch current squad (next GW picks)
+  const { data: teamData, loading: teamDataLoading, refetch: refetchTeam } = useTeamData(fplTeamId, 'planner');
   const { planningGameweek, remainingGameweeks } = useGameweeks();
   
   const [players, setPlayers] = useState<PlayerWithFixtures[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // View state
   const [viewMode, setViewMode] = useState<'pitch' | 'grid'>('grid');
@@ -44,28 +46,118 @@ export default function PlannerPage() {
   const [captainId, setCaptainId] = useState<number | undefined>(undefined);
   const [viceCaptainId, setViceCaptainId] = useState<number | undefined>(undefined);
   const [substitutionMode, setSubstitutionMode] = useState<number | null>(null);
+  const [captainSettingsLoaded, setCaptainSettingsLoaded] = useState(false);
 
-  // Initialize captaincy from picks
+  // Load captain settings from DB or fall back to FPL picks
   useEffect(() => {
-    if (teamData?.picks) {
-      const captain = teamData.picks.find(p => p.is_captain);
-      const vice = teamData.picks.find(p => p.is_vice_captain);
-      if (captain) setCaptainId(captain.element);
-      if (vice) setViceCaptainId(vice.element);
+    async function loadCaptainSettings() {
+      if (!planningGameweek || !teamData?.picks || captainSettingsLoaded) return;
+      
+      try {
+        // Try to load saved settings from DB
+        const response = await fetch(`/api/team/captain?gameweek=${planningGameweek}`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          // If we have saved settings that weren't just fetched from FPL, use them
+          if (data.settings && !data.settings.lastFetchedFromFPL) {
+            setCaptainId(data.settings.captainId);
+            setViceCaptainId(data.settings.viceCaptainId);
+            setCaptainSettingsLoaded(true);
+            return;
+          }
+        }
+        
+        // Fall back to FPL picks data
+        const captain = teamData.picks.find(p => p.is_captain);
+        const vice = teamData.picks.find(p => p.is_vice_captain);
+        if (captain) setCaptainId(captain.element);
+        if (vice) setViceCaptainId(vice.element);
+        
+        // Save FPL defaults to DB for this gameweek
+        if (captain && vice) {
+          await fetch('/api/team/captain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              gameweek: planningGameweek,
+              captainId: captain.element,
+              viceCaptainId: vice.element,
+              fromFPL: true, // Mark as fetched from FPL
+            }),
+          });
+        }
+        
+        setCaptainSettingsLoaded(true);
+      } catch (error) {
+        console.error('Error loading captain settings:', error);
+        // Fall back to FPL picks on error
+        const captain = teamData.picks.find(p => p.is_captain);
+        const vice = teamData.picks.find(p => p.is_vice_captain);
+        if (captain) setCaptainId(captain.element);
+        if (vice) setViceCaptainId(vice.element);
+        setCaptainSettingsLoaded(true);
+      }
     }
-  }, [teamData]);
+    
+    loadCaptainSettings();
+  }, [teamData, planningGameweek, captainSettingsLoaded]);
 
-  // Handle Captain Change
-  const handleCaptainChange = (playerId: number, isCaptain: boolean) => {
-    if (isCaptain) {
-      // If promoting Vice to Captain, clear Vice
-      if (playerId === viceCaptainId) setViceCaptainId(undefined);
-      setCaptainId(playerId);
-    } else {
-      // If promoting Captain to Vice, clear Captain
-      if (playerId === captainId) setCaptainId(undefined);
-      setViceCaptainId(playerId);
+  // Save captain settings to DB when changed by user
+  const saveCaptainSettings = async (newCaptainId: number, newViceCaptainId: number) => {
+    if (!planningGameweek) return;
+    
+    try {
+      await fetch('/api/team/captain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameweek: planningGameweek,
+          captainId: newCaptainId,
+          viceCaptainId: newViceCaptainId,
+          fromFPL: false, // Mark as user-modified
+        }),
+      });
+    } catch (error) {
+      console.error('Error saving captain settings:', error);
     }
+  };
+
+  // Handle Captain Change - now persists to DB
+  const handleCaptainChange = (playerId: number, isCaptain: boolean) => {
+    let newCaptainId = captainId;
+    let newViceCaptainId = viceCaptainId;
+    
+    if (isCaptain) {
+      // If promoting Vice to Captain, swap them
+      if (playerId === viceCaptainId) {
+        newViceCaptainId = captainId;
+      }
+      newCaptainId = playerId;
+      setCaptainId(newCaptainId);
+      if (playerId === viceCaptainId) setViceCaptainId(newViceCaptainId);
+    } else {
+      // Setting as Vice-Captain
+      if (playerId === captainId) {
+        newCaptainId = viceCaptainId;
+      }
+      newViceCaptainId = playerId;
+      setViceCaptainId(newViceCaptainId);
+      if (playerId === captainId) setCaptainId(newCaptainId);
+    }
+    
+    // Save to DB if both are set
+    if (newCaptainId && newViceCaptainId) {
+      saveCaptainSettings(newCaptainId, newViceCaptainId);
+    }
+  };
+
+  // Handle Refresh Team Data
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    refetchTeam();
+    // Small delay to show refresh state
+    setTimeout(() => setIsRefreshing(false), 1500);
   };
 
   // Handle Substitution Logic
@@ -263,10 +355,33 @@ export default function PlannerPage() {
             Multi-Gameweek Planner
           </h1>
           <p className="text-[var(--foreground-muted)] mt-1">
-            View your team's fixtures across all remaining gameweeks
+            View your team&apos;s fixtures across all remaining gameweeks
           </p>
         </div>
-        <ViewToggle view={viewMode} onViewChange={setViewMode} />
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            size="sm"
+            disabled={isRefreshing || teamDataLoading}
+          >
+            <svg
+              className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {isRefreshing ? 'Refreshing...' : 'Refresh Team'}
+          </Button>
+          <ViewToggle view={viewMode} onViewChange={setViewMode} />
+        </div>
       </div>
 
       {/* Gameweek Slider */}
@@ -308,6 +423,25 @@ export default function PlannerPage() {
           onCaptainChange={handleCaptainChange}
           substitutionMode={substitutionMode}
           onSubstitute={handleSubstitute}
+          showNavigation={true}
+          onPrevWeek={() => {
+            const currentIdx = remainingGameweeks.findIndex(gw => gw.id === singleSelectedGW);
+            if (currentIdx > 0) {
+              const prevGW = remainingGameweeks[currentIdx - 1].id;
+              setSingleSelectedGW(prevGW);
+              setSelectedGameweeks([prevGW]);
+            }
+          }}
+          onNextWeek={() => {
+            const currentIdx = remainingGameweeks.findIndex(gw => gw.id === singleSelectedGW);
+            if (currentIdx < remainingGameweeks.length - 1) {
+              const nextGW = remainingGameweeks[currentIdx + 1].id;
+              setSingleSelectedGW(nextGW);
+              setSelectedGameweeks([nextGW]);
+            }
+          }}
+          canGoPrev={remainingGameweeks.findIndex(gw => gw.id === singleSelectedGW) > 0}
+          canGoNext={remainingGameweeks.findIndex(gw => gw.id === singleSelectedGW) < remainingGameweeks.length - 1}
         />
       ) : (
         <EnhancedGameweekGrid
