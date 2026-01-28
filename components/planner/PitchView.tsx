@@ -227,6 +227,7 @@ interface PlayerPitchCardProps {
   isCaptain?: boolean;
   isViceCaptain?: boolean;
   isSelected?: boolean;
+  onCaptainSelect?: () => void;
   onViceCaptainSelect?: () => void;
   enableCaptaincyOptions?: boolean;
   onRemove?: (playerId: number) => void;
