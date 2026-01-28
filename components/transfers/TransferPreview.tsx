@@ -11,6 +11,7 @@ interface TransferPreviewProps {
   className?: string;
   transfersOutValue: number;
   transfersInCost: number;
+  remainingBank?: number;
 }
 
 export function TransferPreview({
@@ -21,9 +22,10 @@ export function TransferPreview({
   className,
   transfersOutValue,
   transfersInCost,
+  remainingBank: propRemainingBank,
 }: TransferPreviewProps) {
   const pointsCost = Math.max(0, (transfersCount - freeTransfers) * 4);
-  const remainingBank = currentBank + transfersOutValue - transfersInCost;
+  const remainingBank = propRemainingBank ?? (currentBank + transfersOutValue - transfersInCost);
 
   return (
     <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-4', className)}>

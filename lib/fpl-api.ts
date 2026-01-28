@@ -459,7 +459,7 @@ export async function getPlayersWithPoints(
   const players: PlayerWithPoints[] = [];
 
   // Fetch all player points in parallel
-  const pointsPromises = playerIds.map(async (playerId) => {
+  const pointsPromises = playerIds.map(async (playerId): Promise<PlayerWithPoints | null> => {
     const player = bootstrap.elements.find((p) => p.id === playerId);
     if (!player) return null;
 
@@ -468,7 +468,7 @@ export async function getPlayersWithPoints(
     return {
       ...player,
       gameweekPoints: points || undefined,
-    };
+    } as PlayerWithPoints;
   });
 
   const results = await Promise.all(pointsPromises);

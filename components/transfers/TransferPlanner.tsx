@@ -83,7 +83,7 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
                 team: -1,
                 now_cost: 0,
                 // Partial FPLPlayer props to satisfy type (minimally)
-                first_name: '', second_name: '', points_per_game: '0', 
+                first_name: '', second_name: '', total_points: 0, points_per_game: '0', 
                 selected_by_percent: '0', form: '0', news: '', 
                 value_form: '0', value_season: '0', cost_change_start: 0,
                 cost_change_event: 0, cost_change_start_fall: 0, cost_change_event_fall: 0,
