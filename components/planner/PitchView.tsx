@@ -1,7 +1,6 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { FDRBadge, GameweekBadge } from '@/components/ui/Badge';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { PlayerWithFixtures, FPLTeam } from '@/types/fpl';
 import { PlayerKit } from '@/components/planner/PlayerKit';
@@ -28,15 +27,13 @@ interface PitchViewProps {
   showNavigation?: boolean;
   canGoPrev?: boolean;
   canGoNext?: boolean;
+  // Price display props
+  playerPrices?: Map<number, number>; // playerId -> selling price in tenths
+  floatingNav?: boolean; // If true, nav buttons float on pitch edges
 }
 
 // Standard 4-4-2 formation positions
-const positions = {
-  1: { row: 0, label: 'GK' }, // Goalkeeper
-  2: { row: 1, label: 'DEF' }, // Defenders
-  3: { row: 2, label: 'MID' }, // Midfielders
-  4: { row: 3, label: 'FWD' }, // Forwards
-};
+
 
 export function PitchView({ 
   players, 
@@ -56,15 +53,14 @@ export function PitchView({
   showNavigation = false,
   canGoPrev = false,
   canGoNext = false,
+  playerPrices,
+  floatingNav = false,
 }: PitchViewProps) {
   // Filter for empty slots (placeholders have id < 0)
-  const isEmptySlot = (p: PlayerWithFixtures) => p.id < 0;
+
 
   // Sort players by position
-  const goalkeepers = players.filter((p) => p.element_type === 1);
-  const defenders = players.filter((p) => p.element_type === 2);
-  const midfielders = players.filter((p) => p.element_type === 3);
-  const forwards = players.filter((p) => p.element_type === 4);
+
 
   // Determine display groups based on mode
   let starters = players.slice(0, 11);
@@ -89,8 +85,8 @@ export function PitchView({
 
   return (
     <div className="relative flex flex-col lg:flex-row lg:items-stretch gap-4 lg:gap-6">
-      {/* PITCH SECTION - Takes ~65% on desktop, matches sidebar height */}
-      <div className="flex-1 lg:max-w-[65%] flex">
+      {/* PITCH SECTION - Full width when floatingNav, otherwise ~65% */}
+      <div className={cn('flex-1 flex', !floatingNav && 'lg:max-w-[65%]')}>
         {/* Pitch Container */}
         <div
           className={cn(
@@ -114,6 +110,54 @@ export function PitchView({
             <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.05)_50%,transparent_50%)] bg-[length:100%_30px]" />
           </div>
 
+          {/* Floating Navigation Buttons on Pitch Edges */}
+          {floatingNav && (
+            <>
+              {/* Previous GW Button - Left Edge */}
+              <button
+                onClick={onPrevWeek}
+                disabled={!canGoPrev}
+                className={cn(
+                  'absolute left-2 top-1/2 -translate-y-1/2 z-30',
+                  'p-2 rounded-full',
+                  'bg-black/50 backdrop-blur-sm border border-white/20',
+                  'text-white hover:bg-black/70 transition-all',
+                  'disabled:opacity-30 disabled:cursor-not-allowed',
+                  'shadow-lg'
+                )}
+                title="Previous Gameweek"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* GW Label - Top Center */}
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-black/50 backdrop-blur-sm border border-white/20">
+                <span className="text-white text-xs font-semibold">GW{selectedGameweek}</span>
+              </div>
+
+              {/* Next GW Button - Right Edge */}
+              <button
+                onClick={onNextWeek}
+                disabled={!canGoNext}
+                className={cn(
+                  'absolute right-2 top-1/2 -translate-y-1/2 z-30',
+                  'p-2 rounded-full',
+                  'bg-black/50 backdrop-blur-sm border border-white/20',
+                  'text-white hover:bg-black/70 transition-all',
+                  'disabled:opacity-30 disabled:cursor-not-allowed',
+                  'shadow-lg'
+                )}
+                title="Next Gameweek"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </>
+          )}
+
           {/* Players Grid - evenly distributed across pitch */}
           <div className="relative z-10 flex flex-col justify-between flex-1 py-1">
             {/* Forwards - at the top */}
@@ -134,6 +178,9 @@ export function PitchView({
                   isSelected={substitutionMode === player.id}
                   onCaptainSelect={() => onCaptainChange?.(player.id, true)}
                   onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                  sellingPrice={playerPrices?.get(player.id)}
+                  onRemove={onRemove}
+                  enableCaptaincyOptions={enableCaptaincyOptions}
                 />
               ))}
             </div>
@@ -156,6 +203,9 @@ export function PitchView({
                   isSelected={substitutionMode === player.id}
                   onCaptainSelect={() => onCaptainChange?.(player.id, true)}
                   onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                  sellingPrice={playerPrices?.get(player.id)}
+                  onRemove={onRemove}
+                  enableCaptaincyOptions={enableCaptaincyOptions}
                 />
               ))}
             </div>
@@ -178,6 +228,9 @@ export function PitchView({
                   isSelected={substitutionMode === player.id}
                   onCaptainSelect={() => onCaptainChange?.(player.id, true)}
                   onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                  sellingPrice={playerPrices?.get(player.id)}
+                  onRemove={onRemove}
+                  enableCaptaincyOptions={enableCaptaincyOptions}
                 />
               ))}
             </div>
@@ -200,6 +253,9 @@ export function PitchView({
                   isSelected={substitutionMode === player.id}
                   onCaptainSelect={() => onCaptainChange?.(player.id, true)}
                   onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                  sellingPrice={playerPrices?.get(player.id)}
+                  onRemove={onRemove}
+                  enableCaptaincyOptions={enableCaptaincyOptions}
                 />
               ))}
             </div>
@@ -207,7 +263,8 @@ export function PitchView({
         </div>
       </div>
 
-      {/* RIGHT SIDEBAR - Navigation + Substitutes */}
+      {/* RIGHT SIDEBAR - Navigation + Substitutes (hidden when floatingNav) */}
+      {!floatingNav && (
       <div className="lg:w-[180px] flex flex-col gap-4">
         {/* Navigation Buttons - Always show, horizontal */}
         <div className="flex items-center justify-center gap-3 bg-[var(--surface)] rounded-xl p-3 border border-[var(--surface-border)]">
@@ -267,6 +324,9 @@ export function PitchView({
                   isSelected={substitutionMode === player.id}
                   onCaptainSelect={() => onCaptainChange?.(player.id, true)}
                   onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                  sellingPrice={playerPrices?.get(player.id)}
+                  onRemove={onRemove}
+                  enableCaptaincyOptions={enableCaptaincyOptions}
                 />
               ))}
             </div>
@@ -285,12 +345,16 @@ export function PitchView({
                   isSelected={substitutionMode === player.id}
                   onCaptainSelect={() => onCaptainChange?.(player.id, true)}
                   onViceCaptainSelect={() => onCaptainChange?.(player.id, false)}
+                  sellingPrice={playerPrices?.get(player.id)}
+                  onRemove={onRemove}
+                  enableCaptaincyOptions={enableCaptaincyOptions}
                 />
               ))}
             </div>
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -308,6 +372,7 @@ interface PlayerPitchCardProps {
   onViceCaptainSelect?: () => void;
   enableCaptaincyOptions?: boolean;
   onRemove?: (playerId: number) => void;
+  sellingPrice?: number; // Selling price in tenths (e.g., 100 = £10.0m)
 }
 
 import { CaptainBadge } from '@/components/planner/CaptainBadge';
@@ -316,6 +381,7 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
+  ContextMenuSeparator,
 } from "@/components/ui/context-menu"
 
 function PlayerPitchCard({ 
@@ -331,6 +397,7 @@ function PlayerPitchCard({
   onViceCaptainSelect,
   enableCaptaincyOptions = true,
   onRemove,
+  sellingPrice,
 }: PlayerPitchCardProps) {
   const isEmptySlot = player.id < 0;
   
@@ -363,130 +430,150 @@ function PlayerPitchCard({
   const hasDoubleGameweek = player.upcomingFixtures?.filter((f) => f.gameweek === gameweek).length > 1;
   const hasBlankGameweek = !fixture;
 
-  // Determine badge content
+  // Determine badge content - abbreviate if showing price
   let badgeContent = '-';
   let badgeColorClass = 'bg-gray-500';
 
   if (hasBlankGameweek) {
-    badgeContent = 'BLANK';
+    badgeContent = 'BGW';
     badgeColorClass = 'bg-gray-500';
   } else if (hasDoubleGameweek) {
     badgeContent = 'DGW';
     badgeColorClass = 'bg-[var(--pl-magenta)]';
   } else if (fixture) {
-    badgeContent = `${fixture.opponent.short_name} (${fixture.isHome ? 'H' : 'A'})`;
+    // Abbreviated: just team code + H/A indicator
+    badgeContent = `${fixture.opponent.short_name}${fixture.isHome ? 'H' : 'A'}`;
     badgeColorClass = getDifficultyColor(fixture.difficulty);
   }
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger>
-        <Tooltip
-          content={
-            <div className="text-center">
-              <p className="font-medium">{player.web_name}</p>
-              {fixture && (
-                <p className="text-xs mt-1">
-                  vs {fixture.opponent.name}
-                </p>
-              )}
-              {/* Mobile Tip */}
-              {enableCaptaincyOptions && (
-                <p className="text-[10px] text-[var(--foreground-muted)] mt-1 opacity-70">
-                  Right-click for options
-                </p>
-              )}
-            </div>
-          }
-        >
-          <button
-            onClick={onClick}
-            className={cn(
-              'relative flex flex-col items-center',
-              'transition-all duration-200',
-              'hover:scale-105',
-              isSub && 'opacity-80',
-              isSelected && 'ring-2 ring-[var(--pl-cyan)] ring-offset-2 ring-offset-transparent rounded-xl scale-110 z-30'
-            )}
-          >
-            {/* Kit & Name Container */}
-            <div className="relative mb-8">
-              {/* Captain Badges */}
-              {isCaptain && (
-                <div className="absolute -top-2 -right-2 z-20 animate-pulse-slow">
-                  <CaptainBadge type="C" size="sm" />
-                </div>
-              )}
-              {isViceCaptain && (
-                <div className="absolute -top-2 -right-2 z-20">
-                  <CaptainBadge type="V" size="sm" />
-                </div>
-              )}
-
-              {/* Jersey */}
-              <PlayerKit teamShortName={teamShortName} size="lg" className="drop-shadow-xl" />
-              
-              {/* Name Overlay */}
-              <div 
-                className={cn(
-                  'absolute -bottom-2 left-1/2 -translate-x-1/2',
-                  'w-[120%] h-8',
-                  'flex items-center justify-center',
-                  'bg-gradient-to-t from-black/90 to-black/60',
-                  'backdrop-blur-[2px]',
-                  'rounded-md',
-                  'border-t border-white/10 shadow-lg',
-                  'z-10'
+    <div className="relative group">
+      <ContextMenu>
+        <ContextMenuTrigger>
+          <Tooltip
+            content={
+              <div className="text-center">
+                <p className="font-medium">{player.web_name}</p>
+                {fixture && (
+                  <p className="text-xs mt-1">
+                    vs {fixture.opponent.name}
+                  </p>
                 )}
-              >
-                <span className="text-white text-[10px] sm:text-xs font-bold truncate px-1 uppercase tracking-wide">
-                  {player.web_name}
-                </span>
+                {/* Mobile Tip */}
+                {enableCaptaincyOptions && (
+                  <p className="text-[10px] text-[var(--foreground-muted)] mt-1 opacity-70">
+                    Right-click for options
+                  </p>
+                )}
               </div>
-            </div>
-
-            {/* Fixture/Difficulty Badge */}
-            <div
+            }
+          >
+            <button
+              onClick={onClick}
               className={cn(
-                'absolute -bottom-1',
-                'px-2 py-0.5 rounded-full',
-                badgeColorClass,
-                'text-[10px] font-bold text-white',
-                'shadow-md border border-white/20',
-                'whitespace-nowrap',
-                'z-20'
+                'relative flex flex-col items-center',
+                'transition-all duration-200',
+                'hover:scale-105',
+                isSub && 'opacity-80',
+                isSelected && 'ring-2 ring-[var(--pl-cyan)] ring-offset-2 ring-offset-transparent rounded-xl scale-110 z-30'
               )}
             >
-              {badgeContent}
-            </div>
-          </button>
-        </Tooltip>
-      </ContextMenuTrigger>
-      
-      {/* Remove Button for Transfers */}
-      {onRemove && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(player.id);
-          }}
-          className="absolute -top-2 -left-2 z-40 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
-          title="Remove player"
-        >
-          <span className="text-xs font-bold leading-none mb-0.5">×</span>
-        </button>
-      )}
+              {/* Kit & Name Container */}
+              <div className="relative mb-8">
+                {/* Captain Badges */}
+                {isCaptain && (
+                  <div className="absolute -top-2 -right-2 z-20 animate-pulse-slow">
+                    <CaptainBadge type="C" size="sm" />
+                  </div>
+                )}
+                {isViceCaptain && (
+                  <div className="absolute -top-2 -right-2 z-20">
+                    <CaptainBadge type="V" size="sm" />
+                  </div>
+                )}
 
-      {enableCaptaincyOptions && (
+                {/* Jersey */}
+                <PlayerKit teamShortName={teamShortName} size="lg" className="drop-shadow-xl" />
+                
+                {/* Name + Price Overlay */}
+                <div 
+                  className={cn(
+                    'absolute -bottom-2 left-1/2 -translate-x-1/2',
+                    'w-[120%]',
+                    sellingPrice ? 'h-10' : 'h-8',
+                    'flex flex-col items-center justify-center',
+                    'bg-gradient-to-t from-black/90 to-black/60',
+                    'backdrop-blur-[2px]',
+                    'rounded-md',
+                    'border-t border-white/10 shadow-lg',
+                    'z-10'
+                  )}
+                >
+                  <span className="text-white text-[10px] sm:text-xs font-bold truncate px-1 uppercase tracking-wide leading-tight">
+                    {player.web_name}
+                  </span>
+                  {sellingPrice !== undefined && (
+                    <span className="text-[var(--pl-cyan)] text-[9px] font-semibold leading-tight">
+                      £{(sellingPrice / 10).toFixed(1)}m
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Fixture/Difficulty Badge */}
+              <div
+                className={cn(
+                  'absolute',
+                  sellingPrice ? '-bottom-2' : '-bottom-1',
+                  'px-1.5 py-0.5 rounded-full',
+                  badgeColorClass,
+                  'text-[9px] font-bold text-white',
+                  'shadow-md border border-white/20',
+                  'whitespace-nowrap',
+                  'z-20'
+                )}
+              >
+                {badgeContent}
+              </div>
+            </button>
+          </Tooltip>
+        </ContextMenuTrigger>
+        
+        {/* Remove Button for Transfers */}
+        {onRemove && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(player.id);
+            }}
+            className="absolute -top-2 -left-2 z-40 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
+            title="Remove player"
+          >
+            <span className="text-xs font-bold leading-none mb-0.5">×</span>
+          </button>
+        )}
+
         <ContextMenuContent>
-          <ContextMenuItem onClick={onCaptainSelect}>
-            Make Captain
-          </ContextMenuItem>
-          <ContextMenuItem onClick={onViceCaptainSelect}>
-            Make Vice-Captain
-          </ContextMenuItem>
+          {enableCaptaincyOptions && (
+            <>
+              <ContextMenuItem onClick={onCaptainSelect}>
+                Make Captain
+              </ContextMenuItem>
+              <ContextMenuItem onClick={onViceCaptainSelect}>
+                Make Vice-Captain
+              </ContextMenuItem>
+            </>
+          )}
+          {onRemove && (
+            <>
+              {enableCaptaincyOptions && <ContextMenuSeparator />}
+              <ContextMenuItem onClick={() => onRemove(player.id)} className="text-red-500 focus:text-red-500 focus:bg-red-500/10">
+                Remove Player
+              </ContextMenuItem>
+            </>
+          )}
         </ContextMenuContent>
-      )}
-    </ContextMenu>
+      </ContextMenu>
+    </div>
   );
 }

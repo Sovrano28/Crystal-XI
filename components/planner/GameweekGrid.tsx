@@ -13,6 +13,7 @@ interface EnhancedGameweekGridProps {
   gameweeks: number[];
   dgwGameweeks?: number[];
   bgwGameweeks?: number[];
+  playerPrices?: Map<number, number>; // Map of playerId -> selling price (in tenths)
 }
 
 export function EnhancedGameweekGrid({
@@ -20,6 +21,7 @@ export function EnhancedGameweekGrid({
   gameweeks,
   dgwGameweeks = [],
   bgwGameweeks = [],
+  playerPrices,
 }: EnhancedGameweekGridProps) {
   // Group players by position
   const groupedPlayers = {
@@ -107,7 +109,7 @@ export function EnhancedGameweekGrid({
                             <PositionBadge position={player.element_type as 1 | 2 | 3 | 4} size="sm" />
                           </div>
                           <div className="text-xs text-[var(--foreground-muted)]">
-                            {formatPrice(player.now_cost)}
+                            {formatPrice(playerPrices?.get(player.id) ?? player.now_cost)}
                           </div>
                         </div>
                       </div>

@@ -10,6 +10,7 @@ import {
   FPLEvent,
   PlayerPoints,
   PlayerWithPoints,
+  FPLTransfer,
 } from '@/types/fpl';
 
 const FPL_API_BASE = 'https://fantasy.premierleague.com/api';
@@ -476,3 +477,166 @@ export async function getPlayersWithPoints(
   return results.filter((p): p is PlayerWithPoints => p !== null);
 }
 
+/**
+ * Fetch team transfer history from FPL API
+ */
+export async function fetchTeamTransfers(teamId: number): Promise<FPLTransfer[]> {
+  try {
+    const response = await fetch(`${FPL_API_BASE}/entry/${teamId}/transfers/`, {
+      next: { revalidate: 60 }, // Revalidate every minute
+    });
+
+    if (!response.ok) {
+      throw new Error(`FPL API error: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching transfers for team ${teamId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Calculate selling price for a player based on FPL's 50% profit rule.
+ * 
+ * FPL Rules:
+ * - If a player's price has risen since purchase, you only keep HALF the profit (rounded down to £0.1m)
+ * - If a player's price has fallen, you lose the FULL amount of the decrease
+ * - Selling price is calculated in tenths (e.g., 100 = £10.0m)
+ * 
+ * @param purchasePrice - Price paid when buying (in tenths)
+ * @param currentPrice - Current market price (in tenths)
+ * @returns Selling price (in tenths)
+ */
+export function calculateSellingPrice(purchasePrice: number, currentPrice: number): number {
+  if (currentPrice <= purchasePrice) {
+    // Price has fallen or stayed the same - selling price equals current price
+    return currentPrice;
+  }
+
+  // Price has risen - only keep half the profit (rounded down)
+  const profit = currentPrice - purchasePrice;
+  const keptProfit = Math.floor(profit / 2); // Round down to nearest 0.1m (1 unit = 0.1m)
+  return purchasePrice + keptProfit;
+}
+
+/**
+ * Calculate squad value (sum of selling prices) for a team.
+ * 
+ * This fetches the team's current squad, transfer history, and bootstrap data
+ * to calculate what FPL calls "Squad Value" - the amount you would have if
+ * you sold all players.
+ * 
+ * @param teamId - FPL team ID
+ * @param picks - Current team picks (optional, will fetch if not provided)
+ * @returns Squad value calculation result with breakdown
+ */
+export async function calculateSquadValue(
+  teamId: number,
+  picks?: Array<{ element: number }>
+): Promise<{
+  squadValue: number;      // Sum of selling prices (in tenths)
+  teamValue: number;       // Sum of current prices (in tenths)
+  playerBreakdown: Array<{
+    playerId: number;
+    webName: string;
+    purchasePrice: number;
+    currentPrice: number;
+    sellingPrice: number;
+  }>;
+}> {
+  try {
+    // Fetch all required data in parallel
+    const [bootstrap, transfers, currentPicks] = await Promise.all([
+      fetchBootstrapStatic(),
+      fetchTeamTransfers(teamId),
+      picks ? Promise.resolve(null) : (async () => {
+        const currentEvent = (await fetchBootstrapStatic()).events.find(e => e.is_current);
+        if (!currentEvent) return null;
+        try {
+          return await fetchTeamPicks(teamId, currentEvent.id);
+        } catch {
+          return null;
+        }
+      })(),
+    ]);
+
+    // Get player IDs from picks
+    const playerIds = picks 
+      ? picks.map(p => p.element)
+      : currentPicks?.picks?.map(p => p.element) || [];
+
+    if (playerIds.length === 0) {
+      console.warn(`[calculateSquadValue] No player picks found for team ${teamId}`);
+      return { squadValue: 0, teamValue: 0, playerBreakdown: [] };
+    }
+
+    // Build a map of player ID -> purchase price from transfer history
+    // The most recent transfer IN for each player gives us their purchase price
+    const purchasePriceMap = new Map<number, number>();
+    
+    // Process transfers in chronological order (oldest first)
+    const sortedTransfers = [...transfers].sort((a, b) => 
+      new Date(a.time).getTime() - new Date(b.time).getTime()
+    );
+    
+    for (const transfer of sortedTransfers) {
+      // When a player is transferred IN, record their purchase price
+      purchasePriceMap.set(transfer.element_in, transfer.element_in_cost);
+    }
+
+    // Calculate selling prices for each player
+    const playerBreakdown: Array<{
+      playerId: number;
+      webName: string;
+      purchasePrice: number;
+      currentPrice: number;
+      sellingPrice: number;
+    }> = [];
+
+    let squadValue = 0;
+    let teamValue = 0;
+
+    for (const playerId of playerIds) {
+      const player = bootstrap.elements.find(p => p.id === playerId);
+      if (!player) {
+        console.warn(`[calculateSquadValue] Player ${playerId} not found in bootstrap`);
+        continue;
+      }
+
+      const currentPrice = player.now_cost;
+      
+      // If we have a purchase price from transfers, use it
+      // Otherwise, fallback to a heuristic: assume purchased at start-of-season price
+      // (current price minus the season change)
+      const hasTransferRecord = purchasePriceMap.has(playerId);
+      const purchasePrice = hasTransferRecord
+        ? purchasePriceMap.get(playerId)!
+        : currentPrice - player.cost_change_start; // fallback for original squad players
+
+      const sellingPrice = calculateSellingPrice(purchasePrice, currentPrice);
+
+      // Debug logging for price calculation tracing
+      console.log(`[calculateSquadValue] ${player.web_name}: currentPrice=${currentPrice/10}m, cost_change_start=${player.cost_change_start/10}, purchasePrice=${purchasePrice/10}m (${hasTransferRecord ? 'from transfer' : 'fallback'}), sellingPrice=${sellingPrice/10}m`);
+
+      playerBreakdown.push({
+        playerId,
+        webName: player.web_name,
+        purchasePrice,
+        currentPrice,
+        sellingPrice,
+      });
+
+      squadValue += sellingPrice;
+      teamValue += currentPrice;
+    }
+
+    console.log(`[calculateSquadValue] Team ${teamId}: Squad Value = £${(squadValue / 10).toFixed(1)}m, Team Value = £${(teamValue / 10).toFixed(1)}m, Diff = £${((teamValue - squadValue) / 10).toFixed(1)}m`);
+
+    return { squadValue, teamValue, playerBreakdown };
+  } catch (error) {
+    console.error(`Error calculating squad value for team ${teamId}:`, error);
+    throw error;
+  }
+}

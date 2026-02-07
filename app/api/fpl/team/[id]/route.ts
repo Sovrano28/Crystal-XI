@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchTeamData, fetchTeamPicks, fetchBootstrapStatic, fetchTeamHistory } from '@/lib/fpl-api';
+import { fetchTeamData, fetchTeamPicks, fetchBootstrapStatic, fetchTeamHistory, calculateSquadValue } from '@/lib/fpl-api';
 
 export async function GET(
   request: NextRequest,
@@ -159,16 +159,36 @@ export async function GET(
           };
           console.log(`[Team API] Constructed finalEntryHistory from root values:`, finalEntryHistory);
         }
+        
+        // Calculate squad value (sum of selling prices) - this matches FPL's "Squad value"
+        let squadValueData = null;
+        try {
+          squadValueData = await calculateSquadValue(teamId, picksData.picks);
+          console.log(`[Team API] Squad value calculated for team ${teamId}: squadValue=${squadValueData.squadValue} (£${(squadValueData.squadValue/10).toFixed(1)}m), teamValue=${squadValueData.teamValue}, breakdown count=${squadValueData.playerBreakdown.length}`);
+        } catch (squadError) {
+          console.error('Error calculating squad value:', squadError);
+          // Don't fail the request if squad value calculation fails
+        }
+        
         return NextResponse.json({
           ...picksData,
-          entry_history: finalEntryHistory,
+          entry_history: {
+            ...finalEntryHistory,
+            // Add squadValue (sum of selling prices) - this is what FPL shows as "Squad value"
+            squadValue: squadValueData?.squadValue ?? finalEntryHistory.value,
+          },
+          // Include per-player price breakdown for accurate selling price display
+          playerPriceBreakdown: squadValueData?.playerBreakdown ?? [],
         });
     }
 
     // If no current gameweek, return general team data with current entry_history
     return NextResponse.json({
       ...generalTeamData,
-      entry_history: finalEntryHistory,
+      entry_history: {
+        ...finalEntryHistory,
+        squadValue: finalEntryHistory?.value ?? 0, // Fallback to value if we can't calculate
+      },
       picks: [],
     });
   } catch (error) {

@@ -170,6 +170,7 @@ export interface FPLTeamPicks {
     overall_rank: number;
     bank: number;
     value: number;
+    squadValue?: number; // Sum of selling prices (calculated, matches FPL's "Squad value")
     event_transfers: number;
     event_transfers_cost: number;
     points_on_bench: number;
@@ -216,6 +217,7 @@ export interface FPLGeneralTeamData {
     overall_rank: number;
     bank: number;
     value: number;
+    squadValue?: number; // Sum of selling prices (calculated, matches FPL's "Squad value")
     event_transfers: number;
     event_transfers_cost: number;
     points_on_bench: number;
@@ -269,4 +271,15 @@ export interface PlayerWithPoints extends FPLPlayer {
   gameweekPoints?: PlayerPoints;
   is_captain?: boolean;
   is_vice_captain?: boolean;
+}
+
+// Transfer data from /entry/{id}/transfers/ endpoint
+export interface FPLTransfer {
+  element_in: number;       // Player bought
+  element_in_cost: number;  // Purchase price (in tenths, divide by 10)
+  element_out: number;      // Player sold
+  element_out_cost: number; // Sale price (in tenths)
+  entry: number;            // Team ID
+  event: number;            // Gameweek of transfer
+  time: string;             // ISO timestamp of transfer
 }

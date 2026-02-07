@@ -14,6 +14,7 @@ import { SkeletonPlayerCard } from '@/components/ui/Skeleton';
 import { PlayerWithFixtures } from '@/types/fpl';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useTransferPlans } from '@/hooks/useTransferPlans';
 
 export default function PlannerPage() {
   const { data: session } = useSession();
@@ -27,6 +28,9 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Player selling prices (from API calculation using transfer history)
+  const [playerPrices, setPlayerPrices] = useState<Map<number, number>>(new Map());
   
   // View state
   const [viewMode, setViewMode] = useState<'pitch' | 'grid'>('grid');
@@ -210,6 +214,9 @@ export default function PlannerPage() {
     return gk === 1 && def >= 3 && fwd >= 1;
   };
 
+  // Transfer Plans
+  const { activePlan } = useTransferPlans();
+
   useEffect(() => {
     async function loadPlayerFixtures() {
       if (!bootstrap || !teamData || !fplTeamId) {
@@ -226,7 +233,12 @@ export default function PlannerPage() {
 
       try {
         setLoading(true);
-        const playerIds = teamData.picks.map((pick) => pick.element);
+        // Base squad IDs
+        const baseIds = teamData.picks.map((pick) => pick.element);
+        
+        // Include planned players if active plan exists
+        const plannedIds = activePlan ? activePlan.transfers.map(t => t.playerIn) : [];
+        const uniqueIds = Array.from(new Set([...baseIds, ...plannedIds]));
         
         // Fetch players with fixtures through API route
         const response = await fetch('/api/fpl/players-fixtures', {
@@ -234,7 +246,7 @@ export default function PlannerPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ playerIds }),
+          body: JSON.stringify({ playerIds: uniqueIds }),
         });
 
         if (!response.ok) {
@@ -242,7 +254,63 @@ export default function PlannerPage() {
         }
 
         const data = await response.json();
-        setPlayers(data.players || []);
+        const allFetchedPlayers: PlayerWithFixtures[] = data.players || [];
+        
+        // Construct the Base Squad (Current Team)
+        // We map using the baseIds order to maintain position
+        const currentSquad = baseIds.map(id => allFetchedPlayers.find(p => p.id === id)).filter(Boolean) as PlayerWithFixtures[];
+        
+        // Construct the Planned Squad (if active plan)
+        // This is what we will display if condition is met
+        let finalSquad = currentSquad;
+        
+        if (activePlan) {
+            // Apply transfers to create planned squad
+            // We clone to avoid mutating currentSquad
+            const plannedSquad = [...currentSquad];
+            
+            activePlan.transfers.forEach(t => {
+                const idx = plannedSquad.findIndex(p => p.id === t.playerOut);
+                if (idx !== -1) {
+                    const playerIn = allFetchedPlayers.find(p => p.id === t.playerIn);
+                    if (playerIn) {
+                        plannedSquad[idx] = playerIn;
+                    }
+                }
+            });
+            
+            // Only use planned squad if we are looking at or after the plan's gameweek
+            // But wait, loadPlayerFixtures updates state once. 
+            // We should store activePlan logic in the state or separate effect?
+            // Actually, simply storing the "Effective Squad" in 'players' state is easiest for now.
+            // But if user switches GW back and forth, we want to toggle squads.
+            // So we really should store 'currentSquad' and 'plannedSquad' separately?
+            // Or just store 'allFetchedPlayers' and derive in render?
+            // 'PitchView' and 'Grid' expect a list of 15 players.
+            // Let's stick to: Store the 'Effective Squad' based on current view.
+            // But 'loadPlayerFixtures' is dependent on [bootstrap, teamData]. Not selectedGW.
+            // So we should just save the *Planned Squad* as the primary state if active plan exists.
+            // Logic: "Active Plan" overrides reality.
+            // If user wants to see old team, they can deactivate plan?
+            // Or we check GW inside this effect?
+            // This effect doesn't depend on selectedGW!
+            // Let's just set 'players' to 'plannedSquad' if activePlan exists.
+            
+            finalSquad = plannedSquad;
+        }
+
+        setPlayers(finalSquad);
+        
+        // Extract player selling prices from teamData.playerPriceBreakdown
+        const pricesMap = new Map<number, number>();
+        const breakdown = (teamData as any).playerPriceBreakdown || [];
+        for (const item of breakdown) {
+          if (item.playerId > 0 && item.sellingPrice !== undefined) {
+            pricesMap.set(item.playerId, item.sellingPrice);
+          }
+        }
+        setPlayerPrices(pricesMap);
+        
         setError(null);
       } catch (err) {
         console.error('Error loading player fixtures:', err);
@@ -253,7 +321,7 @@ export default function PlannerPage() {
     }
 
     loadPlayerFixtures();
-  }, [bootstrap, teamData, fplTeamId]);
+  }, [bootstrap, teamData, fplTeamId, activePlan]);
 
   const allGameweeks = remainingGameweeks.map((gw) => gw.id);
   const isLoading = teamLoading || bootstrapLoading || teamDataLoading || loading;
@@ -384,6 +452,30 @@ export default function PlannerPage() {
         </div>
       </div>
 
+      {/* Active Plan Indicator */}
+      {activePlan && (
+        <div className="bg-[var(--pl-cyan)]/10 border border-[var(--pl-cyan)]/30 rounded-lg p-3 flex items-center justify-between animate-fade-in">
+            <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[var(--pl-cyan)]/20 flex items-center justify-center text-[var(--pl-cyan)]">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                        Viewing Active Plan: <span className="text-[var(--pl-cyan)]">{activePlan.name}</span>
+                    </h3>
+                    <p className="text-xs text-[var(--foreground-muted)]">
+                        Your squad reflects planned transfers for GW{activePlan.gameweek}.
+                    </p>
+                </div>
+            </div>
+            <Link href="/dashboard/transfers">
+                <Button size="sm" variant="outline">Manage Plan</Button>
+            </Link>
+        </div>
+      )}
+
       {/* Gameweek Slider */}
       <div className="space-y-4">
         <GameweekSlider
@@ -442,11 +534,13 @@ export default function PlannerPage() {
           }}
           canGoPrev={remainingGameweeks.findIndex(gw => gw.id === singleSelectedGW) > 0}
           canGoNext={remainingGameweeks.findIndex(gw => gw.id === singleSelectedGW) < remainingGameweeks.length - 1}
+          playerPrices={playerPrices}
         />
       ) : (
         <EnhancedGameweekGrid
           players={players}
           gameweeks={selectedGameweeks}
+          playerPrices={playerPrices}
         />
       )}
     </div>

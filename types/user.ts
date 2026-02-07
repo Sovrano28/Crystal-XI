@@ -48,3 +48,21 @@ export interface SavedTeam {
   updatedAt: Date;
 }
 
+// Transfer Plan for simulated transfers
+export interface TransferPlan {
+  _id?: string;
+  userId: string;
+  name: string;
+  isActive: boolean; // Currently applied plan
+  gameweek: number; // Target gameweek for transfers
+  transfers: Array<{
+    playerOut: number; // FPL player ID being removed
+    playerIn: number; // FPL player ID being added
+    sellingPrice: number; // Selling price of outgoing player
+    purchasePrice: number; // Purchase price of incoming player
+  }>;
+  chipUsed?: 'wildcard' | 'freehit' | 'benchboost' | 'triplecaptain' | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+

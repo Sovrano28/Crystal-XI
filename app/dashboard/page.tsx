@@ -94,7 +94,10 @@ export default function DashboardPage() {
 
   const totalPoints = teamData?.entry_history?.total_points || 0;
   const currentBank = teamData?.entry_history?.bank || 0;
-  const teamValue = teamData?.entry_history?.value || 0;
+  // FPL's "value" from API = Total Value (Squad Value + Bank)
+  // Squad Value = Total Value - Bank = sum of current prices
+  const totalValue = teamData?.entry_history?.value ?? 0;
+  const squadValue = totalValue - currentBank; // This gives us the actual Squad Value
   const overallRank = teamData?.entry_history?.overall_rank || 0;
 
   // Calculate total gameweek points from starting XI (first 11 players)
@@ -149,26 +152,6 @@ export default function DashboardPage() {
       gradient: 'from-green-500 to-emerald-500',
     },
     {
-      label: 'Team Value',
-      value: `£${(teamValue / 10).toFixed(1)}m`,
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
-      gradient: 'from-blue-500 to-cyan-500',
-    },
-    {
-      label: 'Bank',
-      value: `£${(currentBank / 10).toFixed(1)}m`,
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      ),
-      gradient: 'from-purple-500 to-pink-500',
-    },
-    {
       label: 'Current GW',
       value: scoringGameweek?.toString() || '-',
       icon: (
@@ -179,6 +162,13 @@ export default function DashboardPage() {
       gradient: 'from-orange-500 to-red-500',
     },
   ];
+
+  // Team Finances data - displayed in a special combined card
+  const teamFinances = {
+    squadValue: squadValue,
+    totalValue: totalValue,
+    bank: currentBank,
+  };
 
   const quickActions = [
     {
@@ -287,6 +277,116 @@ export default function DashboardPage() {
               </Card>
             ))}
       </div>
+
+      {/* Team Finances Card - Creative Combined Display */}
+      {fplTeamId && !isLoading && (
+        <Card 
+          className="animate-fade-in-up overflow-hidden relative"
+          style={{ animationDelay: '300ms' }}
+          padding="none"
+        >
+          {/* Gradient Background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[var(--pl-purple)]/10 via-transparent to-[var(--pl-cyan)]/10" />
+          
+          <div className="relative p-6">
+            <h3 className="text-sm font-semibold text-[var(--foreground-muted)] uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Team Finances
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+              {/* Squad Value */}
+              <div className="relative group">
+                <div className="p-4 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20 hover:border-blue-500/40 transition-all">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--foreground-muted)]">Squad Value</p>
+                      <p className="text-2xl font-bold text-[var(--foreground)]">
+                        £{(teamFinances.squadValue / 10).toFixed(1)}m
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[var(--foreground-muted)] opacity-70">
+                    Current value of your 15 players
+                  </p>
+                </div>
+              </div>
+
+              {/* Plus Symbol & Bank */}
+              <div className="relative group">
+                <div className="p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 hover:border-purple-500/40 transition-all">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--foreground-muted)]">In the Bank</p>
+                      <p className="text-2xl font-bold text-[var(--foreground)]">
+                        £{(teamFinances.bank / 10).toFixed(1)}m
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[var(--foreground-muted)] opacity-70">
+                    Available for transfers
+                  </p>
+                </div>
+                {/* Connector Line */}
+                <div className="hidden md:block absolute -left-4 top-1/2 -translate-y-1/2 text-[var(--foreground-muted)] text-xl font-light">
+                  +
+                </div>
+              </div>
+
+              {/* Total Value */}
+              <div className="relative group">
+                <div className="p-4 rounded-xl bg-gradient-to-br from-[var(--pl-magenta)]/10 to-[var(--pl-purple)]/10 border border-[var(--pl-magenta)]/20 hover:border-[var(--pl-magenta)]/40 transition-all">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[var(--pl-magenta)] to-[var(--pl-purple)] flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--foreground-muted)]">Total Value</p>
+                      <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--pl-magenta)] to-[var(--pl-cyan)]">
+                        £{(teamFinances.totalValue / 10).toFixed(1)}m
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[var(--foreground-muted)] opacity-70">
+                    Squad + Bank combined
+                  </p>
+                </div>
+                {/* Connector Line */}
+                <div className="hidden md:block absolute -left-4 top-1/2 -translate-y-1/2 text-[var(--foreground-muted)] text-xl font-light">
+                  =
+                </div>
+              </div>
+            </div>
+
+            {/* Equation Bar - Mobile */}
+            <div className="md:hidden mt-4 pt-4 border-t border-[var(--surface-border)]">
+              <div className="flex items-center justify-center gap-2 text-sm text-[var(--foreground-muted)]">
+                <span className="text-blue-400 font-semibold">£{(teamFinances.squadValue / 10).toFixed(1)}m</span>
+                <span>+</span>
+                <span className="text-purple-400 font-semibold">£{(teamFinances.bank / 10).toFixed(1)}m</span>
+                <span>=</span>
+                <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-[var(--pl-magenta)] to-[var(--pl-cyan)]">
+                  £{(teamFinances.totalValue / 10).toFixed(1)}m
+                </span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       {fplTeamId && (

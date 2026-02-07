@@ -12,6 +12,7 @@ interface TransferPreviewProps {
   transfersOutValue: number;
   transfersInCost: number;
   remainingBank?: number;
+  squadValue?: number; // New: sum of selling prices
 }
 
 export function TransferPreview({
@@ -23,29 +24,41 @@ export function TransferPreview({
   transfersOutValue,
   transfersInCost,
   remainingBank: propRemainingBank,
+  squadValue,
 }: TransferPreviewProps) {
   const pointsCost = Math.max(0, (transfersCount - freeTransfers) * 4);
   const remainingBank = propRemainingBank ?? (currentBank + transfersOutValue - transfersInCost);
 
   return (
-    <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-4', className)}>
-      <Card padding="sm" className="bg-[var(--surface-elevated)]">
-        <p className="text-xs text-[var(--foreground-muted)] uppercase tracking-wider font-medium">Remaining Bank</p>
-        <div className={cn("text-2xl font-bold mt-1", remainingBank < 0 ? "text-red-500" : "text-[var(--pl-cyan)]")}>
+    <div className={cn('grid grid-cols-2 md:grid-cols-4 gap-2', className)}>
+      {/* Squad Value */}
+      <Card padding="none" className="bg-[var(--surface-elevated)] px-3 py-2">
+        <p className="text-[10px] text-[var(--foreground-muted)] uppercase tracking-wider font-medium">Squad Value</p>
+        <div className="text-lg font-bold text-[var(--pl-magenta)]">
+          £{squadValue ? (squadValue / 10).toFixed(1) : '—'}m
+        </div>
+      </Card>
+
+      {/* Remaining Bank */}
+      <Card padding="none" className="bg-[var(--surface-elevated)] px-3 py-2">
+        <p className="text-[10px] text-[var(--foreground-muted)] uppercase tracking-wider font-medium">Bank</p>
+        <div className={cn("text-lg font-bold", remainingBank < 0 ? "text-red-500" : "text-[var(--pl-cyan)]")}>
           £{(remainingBank / 10).toFixed(1)}m
         </div>
       </Card>
 
-      <Card padding="sm" className="bg-[var(--surface-elevated)]">
-        <p className="text-xs text-[var(--foreground-muted)] uppercase tracking-wider font-medium">Transfers Made</p>
-        <div className="text-2xl font-bold mt-1 text-[var(--foreground)]">
-          {transfersCount} <span className="text-sm font-normal text-[var(--foreground-muted)]">/ {freeTransfers} free</span>
+      {/* Transfers Made */}
+      <Card padding="none" className="bg-[var(--surface-elevated)] px-3 py-2">
+        <p className="text-[10px] text-[var(--foreground-muted)] uppercase tracking-wider font-medium">Transfers</p>
+        <div className="text-lg font-bold text-[var(--foreground)]">
+          {transfersCount} <span className="text-xs font-normal text-[var(--foreground-muted)]">/ {freeTransfers} free</span>
         </div>
       </Card>
 
-      <Card padding="sm" className="bg-[var(--surface-elevated)]">
-        <p className="text-xs text-[var(--foreground-muted)] uppercase tracking-wider font-medium">Points Cost</p>
-        <div className={cn("text-2xl font-bold mt-1", pointsCost > 0 ? "text-red-500" : "text-[var(--foreground)]")}>
+      {/* Points Cost */}
+      <Card padding="none" className="bg-[var(--surface-elevated)] px-3 py-2">
+        <p className="text-[10px] text-[var(--foreground-muted)] uppercase tracking-wider font-medium">Points Cost</p>
+        <div className={cn("text-lg font-bold", pointsCost > 0 ? "text-red-500" : "text-[var(--foreground)]")}>
           -{pointsCost} pts
         </div>
       </Card>
