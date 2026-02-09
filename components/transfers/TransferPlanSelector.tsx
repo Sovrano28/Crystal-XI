@@ -16,6 +16,15 @@ interface TransferPlanSelectorProps {
   onDeactivate: () => Promise<void>;
 }
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/Dialog';
+
 export function TransferPlanSelector({
   plans,
   activePlan,
@@ -29,6 +38,7 @@ export function TransferPlanSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
+  const [planToDelete, setPlanToDelete] = useState<string | null>(null);
 
   const handleCreate = async () => {
     if (!newPlanName.trim()) return;
@@ -42,10 +52,15 @@ export function TransferPlanSelector({
     setIsOpen(false);
   };
 
-  const handleDelete = async (e: React.MouseEvent, planId: string) => {
+  const handleDeleteClick = (e: React.MouseEvent, planId: string) => {
     e.stopPropagation();
-    if (confirm('Delete this transfer plan?')) {
-      await onDeletePlan(planId);
+    setPlanToDelete(planId);
+  };
+
+  const confirmDelete = async () => {
+    if (planToDelete) {
+      await onDeletePlan(planToDelete);
+      setPlanToDelete(null);
     }
   };
 
@@ -53,6 +68,25 @@ export function TransferPlanSelector({
 
   return (
     <div className="relative">
+      <Dialog open={!!planToDelete} onOpenChange={(open) => !open && setPlanToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Transfer Plan?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the transfer plan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPlanToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Expired Plan Warning */}
       {isExpired && (
         <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-3 animate-fade-in">
@@ -65,7 +99,7 @@ export function TransferPlanSelector({
             </span>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={() => onDeletePlan(activePlan._id!)} className="text-amber-500 hover:text-amber-400">
+            <Button size="sm" variant="ghost" onClick={() => setPlanToDelete(activePlan._id!)} className="text-amber-500 hover:text-amber-400">
               Clear (Delete)
             </Button>
             <Button size="sm" variant="outline" onClick={() => onDeactivate()} className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10">
@@ -204,7 +238,7 @@ export function TransferPlanSelector({
                     
                     {/* Delete Button */}
                     <button
-                      onClick={(e) => handleDelete(e, plan._id!)}
+                      onClick={(e) => handleDeleteClick(e, plan._id!)}
                       className={cn(
                         'p-1.5 rounded-md opacity-0 group-hover:opacity-100',
                         'text-red-400 hover:bg-red-500/10',

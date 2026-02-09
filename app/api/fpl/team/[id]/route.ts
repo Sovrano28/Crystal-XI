@@ -191,10 +191,19 @@ export async function GET(
       },
       picks: [],
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching team data:', error);
+    
+    // Explicitly handle 404 from FPL API
+    if (error.message?.includes('Not Found') || error.message?.includes('404')) {
+        return NextResponse.json(
+            { error: 'Team not found' },
+            { status: 404 }
+        );
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to fetch team data' },
+      { error: 'Failed to fetch team data', details: error.message },
       { status: 500 }
     );
   }

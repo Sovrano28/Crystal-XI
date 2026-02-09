@@ -1,5 +1,7 @@
 'use client';
 
+import { toast } from "sonner";
+
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { FPLTeamPicks, FPLPlayer, FPLBootstrapStatic, PlayerWithFixtures } from '@/types/fpl';
 import { PitchView } from '@/components/planner/PitchView';
@@ -8,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { PlayerSearch } from './PlayerSearch';
 import { TransferPreview } from './TransferPreview';
 import { TransferPlanSelector } from './TransferPlanSelector';
+import { SavePlanModal } from './SavePlanModal';
 import { useTransferPlans } from '@/hooks/useTransferPlans';
 import { cn } from '@/lib/utils';
 
@@ -64,7 +67,26 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
       setSelectedGameweek(prev => prev + 1);
     }
   };
-  
+
+  // Search Filter State
+  const [targetPosition, setTargetPosition] = useState<number | null>(null);
+
+  // Handle Empty Slot Click from PitchView
+  const handleEmptySlotClick = useCallback((position: number) => {
+    // position is 1=GK, 2=DEF, 3=MID, 4=FWD
+    setTargetPosition(position);
+    
+    // Scroll to player search container on mobile/small screens
+    // We add a small delay to ensure state update propagates if needed, 
+    // though React state updates are batched, the DOM scroll is independent.
+    setTimeout(() => {
+        const searchElement = document.getElementById('player-search-container');
+        if (searchElement) {
+            searchElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, 100);
+  }, []);
+
   const initialBank = initialPicks.entry_history.bank;
 
   // Fetch Fixtures and Prices on Mount
@@ -243,7 +265,7 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
     const emptySlotIndex = squad.findIndex(p => p.id < 0 && p.element_type === playerIn.element_type);
     
     if (emptySlotIndex === -1) {
-        alert(`No empty ${playerIn.element_type === 1 ? 'GK' : playerIn.element_type === 2 ? 'DEF' : playerIn.element_type === 3 ? 'MID' : 'FWD'} slots! Remove a player first.`);
+        toast.error(`No empty ${playerIn.element_type === 1 ? 'GK' : playerIn.element_type === 2 ? 'DEF' : playerIn.element_type === 3 ? 'MID' : 'FWD'} slots! Remove a player first.`);
         return;
     }
 
@@ -270,6 +292,92 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
         newSquad[emptySlotIndex] = newPlayer;
         setSquad(newSquad);
     }
+    
+    // Fetch fixtures for the new player (or all plan players) to avoid "BGW"
+    // We do this optimistically after setting state
+    try {
+        const playerIds = [playerIn.id];
+        const res = await fetch('/api/fpl/players-fixtures', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playerIds }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const playerWithFixtures = data.players[0];
+            if (playerWithFixtures) {
+                setSquad(current => current.map(p => 
+                    p.id === playerIn.id ? playerWithFixtures : p
+                ));
+            }
+        }
+    } catch (err) {
+        console.error("Failed to fetch fixtures for new player:", err);
+    }
+  };
+  
+  // Modal State
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [pendingTransfers, setPendingTransfers] = useState<{ playerOut: number, playerIn: number, sellingPrice: number, purchasePrice: number }[]>([]);
+
+  const handleConfirmTransfers = () => {
+      if (!activePlan) {
+          // Identify transfers made in Local Mode
+          const transfersToAdd: { playerOut: number, playerIn: number, sellingPrice: number, purchasePrice: number }[] = [];
+          
+          const positions = [1, 2, 3, 4];
+          
+          for (const pos of positions) {
+              const removed = initialSquad.filter(p => !squad.some(s => s.id === p.id) && p.element_type === pos);
+              const added = squad.filter(p => !initialSquad.some(i => i.id === p.id) && p.element_type === pos && p.id > 0);
+              
+              const count = Math.min(removed.length, added.length);
+              for (let i = 0; i < count; i++) {
+                  const pOut = removed[i];
+                  const pIn = added[i];
+                  const sellPrice = playerPrices.get(pOut.id) ?? pOut.now_cost;
+                  
+                  transfersToAdd.push({
+                      playerOut: pOut.id,
+                      playerIn: pIn.id,
+                      purchasePrice: pIn.now_cost,
+                      sellingPrice: sellPrice || 0
+                  });
+              }
+          }
+
+          if (transfersToAdd.length === 0) {
+              toast.error("No completed transfers to save. Please replace removed players.");
+              return;
+          }
+
+          setPendingTransfers(transfersToAdd);
+          setIsSaveModalOpen(true);
+      }
+  };
+
+  const handleSavePlan = async (planName: string) => {
+      try {
+          const gwToUse = initialGameweek || 1; 
+          const newPlan = await createPlan(planName, gwToUse);
+          
+          if (!newPlan || !newPlan._id) {
+              toast.error("Failed to create plan. Please try again.");
+              return;
+          }
+
+          const updatedPlan = await updatePlan(newPlan._id, { transfers: pendingTransfers });
+          
+          if (updatedPlan) {
+              await activatePlan(newPlan._id);
+              toast.success("Plan saved and activated!");
+          } else {
+              toast.error("Plan created but failed to save transfers.");
+          }
+      } catch (error) {
+          console.error("Error saving plan:", error);
+          toast.error("An error occurred while saving the plan.");
+      }
   };
   
   const handleReset = async () => {
@@ -307,8 +415,6 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
       balance = initialBank + gain - spend;
   } else {
       // Local approximation
-      // Logic: Start Bank + (Removed Players Sell Price) - (Added Players Buy Price)
-      // We need to identify added/removed players
       const removedPlayers = initialSquad.filter(init => !squad.some(curr => curr.id === init.id));
       const addedPlayers = squad.filter(curr => curr.id > 0 && !initialSquad.some(init => init.id === curr.id));
       
@@ -320,6 +426,12 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-140px)]">
+      <SavePlanModal 
+        isOpen={isSaveModalOpen} 
+        onClose={() => setIsSaveModalOpen(false)} 
+        onSave={handleSavePlan}
+        defaultName={`Plan ${plans.length + 1}`}
+      />
       {/* Left Column: Pitch View */}
       <div className="lg:col-span-8 flex flex-col gap-4">
         {/* Top Control Bar: Plans & Stats */}
@@ -379,6 +491,7 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
                             onNextWeek={handleNextWeek}
                             canGoPrev={selectedGameweek > minGameweek}
                             canGoNext={selectedGameweek < maxGameweek}
+                            onEmptySlotClick={handleEmptySlotClick}
                         />
                     )}
                 </div>
@@ -387,7 +500,7 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
       </div>
 
       {/* Right Column: Player Search & Sidebar */}
-      <div className="lg:col-span-4 flex flex-col gap-4 h-full overflow-hidden">
+      <div className="lg:col-span-4 flex flex-col gap-4 h-full overflow-hidden" id="player-search-container">
         <Card className="flex-1 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-[var(--surface-border)]">
                 <h3 className="font-semibold text-[var(--foreground)]">Find Player</h3>
@@ -400,6 +513,7 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
                 <PlayerSearch 
                     players={bootstrap.elements} 
                     onSelectPlayer={handleSelectReplacement}
+                    initialPositionFilter={targetPosition}
                 />
             </div>
         </Card>
@@ -415,8 +529,13 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
                 {/* Confirm button only for local mode or explicit save? 
                     For persistent plan, changes are auto-saved. 
                     Maybe hide "Confirm"? Or change to "Go to Planner"? */}
-                 <Button className="w-full mt-4" variant="glow" disabled={activePlan !== null}>
-                    {activePlan ? 'Changes Auto-Saved' : 'Confirm Transfers'}
+                 <Button 
+                    className="w-full mt-4" 
+                    variant="glow" 
+                    disabled={activePlan !== null}
+                    onClick={handleConfirmTransfers}
+                 >
+                    {activePlan ? 'Changes Auto-Saved' : 'Confirm & Save as Plan'}
                 </Button>
             </Card>
         )}

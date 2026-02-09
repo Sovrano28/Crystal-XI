@@ -30,10 +30,8 @@ interface PitchViewProps {
   // Price display props
   playerPrices?: Map<number, number>; // playerId -> selling price in tenths
   floatingNav?: boolean; // If true, nav buttons float on pitch edges
+  onEmptySlotClick?: (position: number) => void;
 }
-
-// Standard 4-4-2 formation positions
-
 
 export function PitchView({ 
   players, 
@@ -55,6 +53,7 @@ export function PitchView({
   canGoNext = false,
   playerPrices,
   floatingNav = false,
+  onEmptySlotClick,
 }: PitchViewProps) {
   // Filter for empty slots (placeholders have id < 0)
 
@@ -181,6 +180,7 @@ export function PitchView({
                   sellingPrice={playerPrices?.get(player.id)}
                   onRemove={onRemove}
                   enableCaptaincyOptions={enableCaptaincyOptions}
+                  onEmptySlotClick={onEmptySlotClick}
                 />
               ))}
             </div>
@@ -206,6 +206,7 @@ export function PitchView({
                   sellingPrice={playerPrices?.get(player.id)}
                   onRemove={onRemove}
                   enableCaptaincyOptions={enableCaptaincyOptions}
+                  onEmptySlotClick={onEmptySlotClick}
                 />
               ))}
             </div>
@@ -231,6 +232,7 @@ export function PitchView({
                   sellingPrice={playerPrices?.get(player.id)}
                   onRemove={onRemove}
                   enableCaptaincyOptions={enableCaptaincyOptions}
+                  onEmptySlotClick={onEmptySlotClick}
                 />
               ))}
             </div>
@@ -256,6 +258,7 @@ export function PitchView({
                   sellingPrice={playerPrices?.get(player.id)}
                   onRemove={onRemove}
                   enableCaptaincyOptions={enableCaptaincyOptions}
+                  onEmptySlotClick={onEmptySlotClick}
                 />
               ))}
             </div>
@@ -327,6 +330,7 @@ export function PitchView({
                   sellingPrice={playerPrices?.get(player.id)}
                   onRemove={onRemove}
                   enableCaptaincyOptions={enableCaptaincyOptions}
+                  onEmptySlotClick={onEmptySlotClick}
                 />
               ))}
             </div>
@@ -348,6 +352,7 @@ export function PitchView({
                   sellingPrice={playerPrices?.get(player.id)}
                   onRemove={onRemove}
                   enableCaptaincyOptions={enableCaptaincyOptions}
+                  onEmptySlotClick={onEmptySlotClick}
                 />
               ))}
             </div>
@@ -373,6 +378,7 @@ interface PlayerPitchCardProps {
   enableCaptaincyOptions?: boolean;
   onRemove?: (playerId: number) => void;
   sellingPrice?: number; // Selling price in tenths (e.g., 100 = £10.0m)
+  onEmptySlotClick?: (position: number) => void;
 }
 
 import { CaptainBadge } from '@/components/planner/CaptainBadge';
@@ -398,6 +404,7 @@ function PlayerPitchCard({
   enableCaptaincyOptions = true,
   onRemove,
   sellingPrice,
+  onEmptySlotClick,
 }: PlayerPitchCardProps) {
   const isEmptySlot = player.id < 0;
   
@@ -426,25 +433,8 @@ function PlayerPitchCard({
      );
   }
 
-  const fixture = player.upcomingFixtures?.find((f) => f.gameweek === gameweek);
-  const hasDoubleGameweek = player.upcomingFixtures?.filter((f) => f.gameweek === gameweek).length > 1;
-  const hasBlankGameweek = !fixture;
-
-  // Determine badge content - abbreviate if showing price
-  let badgeContent = '-';
-  let badgeColorClass = 'bg-gray-500';
-
-  if (hasBlankGameweek) {
-    badgeContent = 'BGW';
-    badgeColorClass = 'bg-gray-500';
-  } else if (hasDoubleGameweek) {
-    badgeContent = 'DGW';
-    badgeColorClass = 'bg-[var(--pl-magenta)]';
-  } else if (fixture) {
-    // Abbreviated: just team code + H/A indicator
-    badgeContent = `${fixture.opponent.short_name}${fixture.isHome ? 'H' : 'A'}`;
-    badgeColorClass = getDifficultyColor(fixture.difficulty);
-  }
+  const fixtures = player.upcomingFixtures?.filter((f) => f.gameweek === gameweek) || [];
+  const hasBlankGameweek = fixtures.length === 0;
 
   return (
     <div className="relative group">
@@ -454,11 +444,12 @@ function PlayerPitchCard({
             content={
               <div className="text-center">
                 <p className="font-medium">{player.web_name}</p>
-                {fixture && (
-                  <p className="text-xs mt-1">
-                    vs {fixture.opponent.name}
+                {fixtures.map((f, i) => (
+                  <p key={i} className="text-xs mt-1">
+                    vs {f.opponent.name} ({f.isHome ? 'H' : 'A'})
                   </p>
-                )}
+                ))}
+                {hasBlankGameweek && <p className="text-xs mt-1">No Fixture</p>}
                 {/* Mobile Tip */}
                 {enableCaptaincyOptions && (
                   <p className="text-[10px] text-[var(--foreground-muted)] mt-1 opacity-70">
@@ -520,20 +511,35 @@ function PlayerPitchCard({
                 </div>
               </div>
 
-              {/* Fixture/Difficulty Badge */}
+              {/* Fixture/Difficulty Badges Container */}
               <div
                 className={cn(
-                  'absolute',
+                  'absolute flex flex-col items-center gap-0.5 pointer-events-none',
                   sellingPrice ? '-bottom-2' : '-bottom-1',
-                  'px-1.5 py-0.5 rounded-full',
-                  badgeColorClass,
-                  'text-[9px] font-bold text-white',
-                  'shadow-md border border-white/20',
-                  'whitespace-nowrap',
                   'z-20'
                 )}
+                style={{ transform: fixtures.length > 1 ? 'translateY(15%)' : 'none' }} 
               >
-                {badgeContent}
+                 {hasBlankGameweek ? (
+                    <div className="px-1.5 py-0.5 rounded-full bg-gray-500 text-[9px] font-bold text-white shadow-md border border-white/20 whitespace-nowrap">
+                        BGW
+                    </div>
+                 ) : (
+                    fixtures.map((fixture, idx) => (
+                        <div
+                            key={idx}
+                            className={cn(
+                            'px-1.5 py-0.5 rounded-full',
+                            getDifficultyColor(fixture.difficulty),
+                            'text-[9px] font-bold text-white',
+                            'shadow-md border border-white/20',
+                            'whitespace-nowrap'
+                            )}
+                        >
+                            {fixture.opponent.short_name} ({fixture.isHome ? 'H' : 'A'})
+                        </div>
+                    ))
+                 )}
               </div>
             </button>
           </Tooltip>

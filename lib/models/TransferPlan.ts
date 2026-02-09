@@ -58,7 +58,7 @@ TransferPlanSchema.index({ userId: 1, gameweek: 1 });
 TransferPlanSchema.index({ userId: 1, isActive: 1 });
 
 // Ensure only one active plan per user
-TransferPlanSchema.pre('save', async function (next) {
+TransferPlanSchema.pre('save', async function () {
   if (this.isActive) {
     // Deactivate other plans for this user when activating one
     await mongoose.models.TransferPlan?.updateMany(
@@ -66,7 +66,6 @@ TransferPlanSchema.pre('save', async function (next) {
       { isActive: false }
     );
   }
-  next();
 });
 
 const TransferPlanModel: Model<TransferPlan> =

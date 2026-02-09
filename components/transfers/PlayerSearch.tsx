@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -12,12 +12,21 @@ interface PlayerSearchProps {
   players: FPLPlayer[];
   onSelectPlayer: (player: FPLPlayer) => void;
   className?: string;
+  initialPositionFilter?: number | null;
 }
 
-export function PlayerSearch({ players, onSelectPlayer, className }: PlayerSearchProps) {
+export function PlayerSearch({ players, onSelectPlayer, className, initialPositionFilter }: PlayerSearchProps) {
   const [query, setQuery] = useState('');
-  const [positionFilter, setPositionFilter] = useState<number | null>(null);
+  const [positionFilter, setPositionFilter] = useState<number | null>(initialPositionFilter || null);
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
+
+  // Update filter when prop changes
+  // Update filter when prop changes
+  useEffect(() => {
+     if (initialPositionFilter !== undefined) {
+         setPositionFilter(initialPositionFilter);
+     }
+  }, [initialPositionFilter]);
 
   const filteredPlayers = useMemo(() => {
     return players
