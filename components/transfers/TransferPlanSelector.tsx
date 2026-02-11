@@ -80,7 +80,7 @@ export function TransferPlanSelector({
             <Button variant="ghost" onClick={() => setPlanToDelete(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmDelete}>
+            <Button variant="danger" onClick={confirmDelete}>
               Delete
             </Button>
           </DialogFooter>
