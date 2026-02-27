@@ -223,16 +223,20 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
             return; // The useEffect will handle the update
         }
     } else {
-         // Local mode (no plan) - check our local state tracking?
-         // For now, implicit via negative ID logic below.
+         // Local mode (no plan) - use slot index to get original owner
+         // (handles case when removing an "added" player - we need the slot's original)
     }
 
     // 2. Visual Update (Optimistic / Local)
-    setSquad(current => current.map(p => {
+    setSquad(current => {
+        const slotIndex = current.findIndex(p => p.id === playerId);
+        const slotOriginalId = slotIndex !== -1 ? initialSquad[slotIndex]?.id : undefined;
+        const effectiveOriginalId = slotOriginalId ?? originalId;
+        return current.map(p => {
         if (p.id === playerId) {
             // Use negative Original ID to track the slot owner
             return {
-                id: -originalId, // Store original ID as negative
+                id: -effectiveOriginalId, // Store original ID as negative
                 web_name: 'Empty',
                 element_type: p.element_type,
                 team: -1,
@@ -256,7 +260,8 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
             } as PlayerWithFixtures;
         }
         return p;
-    }));
+        });
+    });
   };
 
   // Handle Add Player (Select Replacement)
@@ -500,8 +505,8 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
       </div>
 
       {/* Right Column: Player Search & Sidebar */}
-      <div className="lg:col-span-4 flex flex-col gap-4 h-full overflow-hidden" id="player-search-container">
-        <Card className="flex-1 flex flex-col overflow-hidden">
+      <div className="lg:col-span-4 flex flex-col gap-4 h-full overflow-y-auto" id="player-search-container">
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-[420px]">
             <div className="p-4 border-b border-[var(--surface-border)]">
                 <h3 className="font-semibold text-[var(--foreground)]">Find Player</h3>
                 <p className="text-xs text-[var(--foreground-muted)] mt-1">
@@ -519,7 +524,7 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
         </Card>
 
         {transfersCount > 0 && (
-            <Card padding="sm">
+            <Card padding="sm" className="flex-shrink-0">
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="font-semibold">Transfers Pending: {transfersCount}</h3>
                     <Button variant="ghost" size="sm" onClick={handleReset} className="text-red-500 hover:text-red-600">

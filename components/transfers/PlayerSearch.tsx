@@ -84,7 +84,7 @@ export function PlayerSearch({ players, onSelectPlayer, className, initialPositi
         </div>
       </div>
 
-      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-2 min-h-[280px] max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
         {filteredPlayers.map((player) => (
           <Card
             key={player.id}

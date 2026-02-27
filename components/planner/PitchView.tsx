@@ -411,7 +411,7 @@ function PlayerPitchCard({
   if (isEmptySlot) {
      return (
         <button 
-          onClick={onClick}
+          onClick={() => onEmptySlotClick?.(player.element_type)}
           className={cn(
              "relative flex flex-col items-center justify-center",
              "w-16 h-20 md:w-20 md:h-24",
