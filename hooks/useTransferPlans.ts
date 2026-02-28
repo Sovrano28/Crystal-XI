@@ -55,13 +55,9 @@ export function useTransferPlans(): UseTransferPlansReturn {
     }
   }, []);
 
-  // Initial load & Polling
+  // Initial load only - manual refresh via refreshPlans() when user clicks Refresh
   useEffect(() => {
     refreshPlans();
-    
-    // Poll every 30 seconds for cross-device sync
-    const interval = setInterval(refreshPlans, 30000);
-    return () => clearInterval(interval);
   }, [refreshPlans]);
 
   // Create new plan

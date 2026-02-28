@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useBootstrapData, useTeamData } from '@/hooks/useFPLData';
 import { useUserTeam } from '@/hooks/useTeam';
@@ -15,6 +15,47 @@ import { PlayerWithFixtures } from '@/types/fpl';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useTransferPlans } from '@/hooks/useTransferPlans';
+
+const PLANNER_LINEUP_KEY = (teamId: number) => `crystal-planner-lineup-${teamId}`;
+
+function getSquadSignature(playerIds: number[]): string {
+  return [...playerIds].sort((a, b) => a - b).join(',');
+}
+
+function loadSavedLineup(teamId: number): { squadSignature: string; playerIds: number[] } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(PLANNER_LINEUP_KEY(teamId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { squadSignature: string; playerIds: number[] };
+    if (parsed?.playerIds?.length === 15 && parsed?.squadSignature) return parsed;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function saveLineup(teamId: number, playerIds: number[]) {
+  if (typeof window === 'undefined' || playerIds.length !== 15) return;
+  const squadSignature = getSquadSignature(playerIds);
+  try {
+    localStorage.setItem(
+      PLANNER_LINEUP_KEY(teamId),
+      JSON.stringify({ squadSignature, playerIds })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearSavedLineup(teamId: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(PLANNER_LINEUP_KEY(teamId));
+  } catch {
+    /* ignore */
+  }
+}
 
 export default function PlannerPage() {
   const { data: session } = useSession();
@@ -156,11 +197,11 @@ export default function PlannerPage() {
     }
   };
 
-  // Handle Refresh Team Data
+  // Handle Refresh Team Data & Transfer Plans
   const handleRefresh = async () => {
     setIsRefreshing(true);
     refetchTeam();
-    // Small delay to show refresh state
+    await refreshPlans();
     setTimeout(() => setIsRefreshing(false), 1500);
   };
 
@@ -196,12 +237,20 @@ export default function PlannerPage() {
     // Validate Formation
     if (isValidFormation(newPlayers)) {
       setPlayers(newPlayers);
+      if (fplTeamId) saveLineup(fplTeamId, newPlayers.map((p) => p.id));
     } else {
       // Warn user (could use a toast here)
       alert("Invalid formation! You need 1 GK, at least 3 DEFs, and at least 1 FWD.");
     }
-    
+
     setSubstitutionMode(null);
+  };
+
+  const handleResetLineup = () => {
+    if (lastServerSquadRef.current.length === 15) {
+      setPlayers(lastServerSquadRef.current);
+      if (fplTeamId) clearSavedLineup(fplTeamId);
+    }
   };
 
   // Formation Validator
@@ -214,8 +263,11 @@ export default function PlannerPage() {
     return gk === 1 && def >= 3 && fwd >= 1;
   };
 
-  // Transfer Plans
-  const { activePlan } = useTransferPlans();
+  // Transfer Plans (manual refresh only - no polling)
+  const { activePlan, refreshPlans } = useTransferPlans();
+
+  // Keep last server-computed squad for Reset to default
+  const lastServerSquadRef = useRef<PlayerWithFixtures[]>([]);
 
   useEffect(() => {
     async function loadPlayerFixtures() {
@@ -232,7 +284,9 @@ export default function PlannerPage() {
       }
 
       try {
-        setLoading(true);
+        // Only show loading skeleton on initial load - prevents "blink" when effect re-runs
+        // (e.g. from useTransferPlans 30s poll updating activePlan reference)
+        if (players.length === 0) setLoading(true);
         // Base squad IDs
         const baseIds = teamData.picks.map((pick) => pick.element);
         
@@ -299,8 +353,38 @@ export default function PlannerPage() {
             finalSquad = plannedSquad;
         }
 
-        setPlayers(finalSquad);
-        
+        // Always keep ref for Reset to default
+        lastServerSquadRef.current = finalSquad;
+
+        const squadSignature = getSquadSignature(finalSquad.map((p) => p.id));
+        const saved = fplTeamId ? loadSavedLineup(fplTeamId) : null;
+
+        // Apply saved lineup from localStorage if squad matches
+        let squadToSet = finalSquad;
+        if (
+          saved &&
+          saved.squadSignature === squadSignature &&
+          saved.playerIds.length === 15
+        ) {
+          const idToPlayer = new Map(finalSquad.map((p) => [p.id, p]));
+          const reordered = saved.playerIds
+            .map((id) => idToPlayer.get(id))
+            .filter(Boolean) as PlayerWithFixtures[];
+          if (reordered.length === 15) squadToSet = reordered;
+        } else {
+          // Preserve in-memory order when effect re-runs but squad unchanged
+          const currentIds = new Set(players.map((p) => p.id));
+          const newIds = new Set(finalSquad.map((p) => p.id));
+          const samePlayerSet =
+            players.length === 15 &&
+            finalSquad.length === 15 &&
+            currentIds.size === newIds.size &&
+            [...currentIds].every((id) => newIds.has(id));
+          if (samePlayerSet) squadToSet = players; // keep user's current order
+        }
+
+        setPlayers(squadToSet);
+
         // Extract player selling prices from teamData.playerPriceBreakdown
         const pricesMap = new Map<number, number>();
         const breakdown = (teamData as any).playerPriceBreakdown || [];
@@ -417,7 +501,7 @@ export default function PlannerPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[var(--foreground)]">
             Multi-Gameweek Planner
@@ -426,12 +510,36 @@ export default function PlannerPage() {
             View your team&apos;s fixtures across all remaining gameweeks
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {viewMode === 'pitch' && (
+            <Button
+              onClick={handleResetLineup}
+              variant="outline"
+              size="sm"
+              title="Reset to default lineup"
+            >
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                />
+              </svg>
+              Reset lineup
+            </Button>
+          )}
           <Button
             onClick={handleRefresh}
             variant="outline"
             size="sm"
             disabled={isRefreshing || teamDataLoading}
+            title="Refresh team data and transfer plans"
           >
             <svg
               className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`}
@@ -446,7 +554,7 @@ export default function PlannerPage() {
                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
               />
             </svg>
-            {isRefreshing ? 'Refreshing...' : 'Refresh Team'}
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
           <ViewToggle view={viewMode} onViewChange={setViewMode} />
         </div>
