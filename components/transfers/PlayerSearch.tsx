@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { FPLPlayer } from '@/types/fpl';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { PlayerInjuryIcon } from '@/components/ui/PlayerInjuryIcon';
 
 interface PlayerSearchProps {
   players: FPLPlayer[];
@@ -103,7 +104,10 @@ export function PlayerSearch({ players, onSelectPlayer, className, initialPositi
                 />
               </div>
               <div>
-                <p className="font-semibold text-sm text-[var(--foreground)]">{player.web_name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-sm text-[var(--foreground)]">{player.web_name}</p>
+                  <PlayerInjuryIcon player={player} size="sm" />
+                </div>
                 <div className="flex items-center gap-2 text-xs text-[var(--foreground-muted)]">
                   <span>{positions.find(p => p.id === player.element_type)?.short}</span>
                   <span>•</span>

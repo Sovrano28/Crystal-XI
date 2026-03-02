@@ -243,7 +243,7 @@ export function TransferPlanner({ initialPicks, bootstrap, teamId }: TransferPla
                 now_cost: 0,
                 // Partial props
                 first_name: '', second_name: '', total_points: 0, points_per_game: '0', 
-                selected_by_percent: '0', form: '0', news: '', 
+                selected_by_percent: '0', form: '0', news: '', status: 'a',
                 value_form: '0', value_season: '0', cost_change_start: 0,
                 cost_change_event: 0, cost_change_start_fall: 0, cost_change_event_fall: 0,
                 in_dreamteam: false, dreamteam_count: 0, photo: '',

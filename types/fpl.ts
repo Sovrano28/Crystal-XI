@@ -14,6 +14,7 @@ export interface FPLPlayer {
   form: string;
   news: string;
   news_added?: string;
+  status: string; // 'a', 'd', 'i', 's', 'u'
   chance_of_playing_this_round?: number;
   chance_of_playing_next_round?: number;
   value_form: string;
@@ -50,6 +51,10 @@ export interface FPLPlayer {
   expected_assists: string;
   expected_goal_involvements: string;
   expected_goals_conceded: string;
+  expected_goals_per_90?: number;
+  expected_assists_per_90?: number;
+  expected_goal_involvements_per_90?: number;
+  expected_goals_conceded_per_90?: number;
   influence_rank: number;
   influence_rank_type: number;
   creativity_rank: number;

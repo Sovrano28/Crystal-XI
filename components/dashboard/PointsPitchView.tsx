@@ -5,6 +5,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { PlayerWithPoints, FPLTeam } from '@/types/fpl';
 import { PlayerKit } from '@/components/planner/PlayerKit';
 import { CaptainBadge } from '@/components/planner/CaptainBadge';
+import { PlayerInjuryIcon } from '@/components/ui/PlayerInjuryIcon';
 
 interface PointsPitchViewProps {
   players: PlayerWithPoints[];
@@ -289,6 +290,11 @@ function PlayerPointsCard({ player, teamShortName, gameweek, onClick, isSub }: P
               <CaptainBadge type="V" size="sm" />
             </div>
           )}
+
+          {/* Injury Badge Overlay */}
+          <div className="absolute -top-1 -left-1 z-20 transform -translate-x-1/2 -translate-y-1/2">
+             <PlayerInjuryIcon player={player} size="md" showBackground />
+          </div>
           
           {/* Jersey */}
           <PlayerKit teamShortName={teamShortName} size="lg" className="drop-shadow-xl" />
